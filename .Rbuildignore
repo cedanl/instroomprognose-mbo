@@ -1,0 +1,25 @@
+^_freeze$
+^_book$
+^.*_cache$
+^.*_files$
+^.*\.qmd$
+^.*\.html$
+^_quarto.yml
+
+# Project specific
+^.*analysis\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^data/
+^00_setup.R
+
+# Environment management
+^renv$
+^renv\.lock$
+^utils/renv$
+^utils/renv\.lock$
+^utils$
+^config\.yml$
+
+# File types (using proper regex)
+\.(rds|quarto)$
