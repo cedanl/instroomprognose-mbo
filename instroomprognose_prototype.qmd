@@ -1,0 +1,383 @@
+---
+title: "Student Inflow Analysis - MVP Prototype"
+format: html
+---
+
+```{r}
+#| label: setup
+#| cache: false
+#| output: false
+#| include: false
+#| freeze: false
+
+# Load required libraries
+source("00_setup.R")
+
+```
+
+## 1. Data Loading & Preparation
+
+First, let's load the application data and reference tables:
+
+```{r}
+#| label: load-data
+
+applications <- suppressWarnings(safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+                      delim = ",",
+                      col_types = cols(.default = col_guess())))
+
+# Load reference data
+brin <- read_excel("data/reference/BRIN.xlsx")
+programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
+
+# Join with reference data
+applications_enriched <- applications %>%
+    # Convert opleidingcode to integer for joining (drops a small % of non-numeric values)
+    mutate(opleidingcode = as.integer(opleidingcode)) %>%
+    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) %>%
+    left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
+```
+
+## 2. Application Overview Dashboard
+
+Let's create key KPIs and visualizations that would form our main dashboard:
+
+```{r}
+#| label: dashboard-metrics
+
+# Calculate key metrics by year
+yearly_metrics <- applications_enriched %>%
+  group_by(schooljaar) %>%
+  summarise(
+    total_applications = n(),
+    unique_students = n_distinct(bsnhash),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(schooljaar)
+
+# Display metrics table
+knitr::kable(yearly_metrics, 
+             col.names = c("School Year", "Total Applications", "Unique Students", "Conversion Rate (%)"),
+             digits = c(0, 0, 0, 1))
+```
+
+```{r}
+#| label: yearly-trend-plot
+
+# Create trend visualization
+yearly_metrics %>%
+  pivot_longer(cols = c(total_applications, unique_students), 
+               names_to = "metric", 
+               values_to = "value") %>%
+  mutate(metric = if_else(metric == "total_applications", 
+                         "Total Applications", 
+                         "Unique Students")) %>%
+  ggplot(aes(x = factor(schooljaar), y = value, group = metric, color = metric)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "Application Trends by Year",
+       x = "School Year",
+       y = "Count",
+       color = "Metric") +
+  scale_y_continuous(labels = comma) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| label: conversion-rate-plot
+
+# Conversion rate visualization
+ggplot(yearly_metrics, aes(x = factor(schooljaar), y = conversion_rate)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
+            vjust = -0.5, size = 3.5) +
+  theme_minimal() +
+  labs(title = "Conversion Rate by Year",
+       x = "School Year",
+       y = "Conversion Rate (%)") +
+  ylim(0, max(yearly_metrics$conversion_rate) * 1.1)
+```
+
+## 3. Double Application Analysis
+
+One of our key features is analyzing students who apply to multiple programs or institutions:
+
+```{r}
+#| label: double-applications
+
+# Identify and analyze double applications
+application_counts <- applications_enriched %>%
+  group_by(bsnhash, schooljaar) %>%
+  summarise(
+    application_count = n(),
+    institutions_count = n_distinct(instellingserkenningscode),
+    programs_count = n_distinct(opleidingcode),
+    is_enrolled = any(status == "ENROLLED"),
+    .groups = "drop"
+  )
+
+# Distribution of applications per student
+app_distribution <- application_counts %>%
+  group_by(application_count) %>%
+  summarise(
+    students = n(),
+    converted = sum(is_enrolled),
+    conversion_rate = mean(is_enrolled) * 100,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    students_pct = students / sum(students) * 100
+  )
+
+# Display the distribution
+knitr::kable(app_distribution, 
+             col.names = c("Applications per Student", "Student Count", 
+                          "Enrolled", "Conversion Rate (%)", "% of Total"),
+             digits = c(0, 0, 0, 1, 1))
+```
+
+```{r}
+#| label: app-count-distribution
+
+# Visualization: Application count distribution
+ggplot(app_distribution, aes(x = factor(application_count), y = students)) +
+  geom_col(fill = "darkcyan") +
+  geom_text(aes(label = paste0(round(students_pct, 1), "%")), 
+            vjust = -0.5, size = 3) +
+  theme_minimal() +
+  labs(title = "Distribution of Applications per Student",
+       x = "Number of Applications",
+       y = "Number of Students") +
+  scale_y_continuous(labels = comma)
+```
+
+```{r}
+#| label: conversion-by-app-count
+
+# Conversion rates by application count
+ggplot(app_distribution, aes(x = factor(application_count), y = conversion_rate)) +
+  geom_col(fill = "darkgoldenrod") +
+  geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
+            vjust = -0.5, size = 3) +
+  theme_minimal() +
+  labs(title = "Conversion Rate by Number of Applications",
+       x = "Number of Applications",
+       y = "Conversion Rate (%)") +
+  ylim(0, max(app_distribution$conversion_rate) * 1.1)
+```
+
+## 4. Program and Institution Analysis
+
+Let's analyze which programs and institutions have the highest application volumes and conversion rates:
+
+```{r}
+#| label: program-analysis
+
+# Top programs by application volume
+top_programs <- applications_enriched %>%
+  filter(!is.na(Opleidingsnaam)) %>%
+  group_by(opleidingcode, Opleidingsnaam) %>%
+  summarise(
+    applications = n(),
+    conversions = sum(status == "ENROLLED", na.rm = TRUE),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(applications)) %>%
+  head(10)
+
+# Display top programs
+knitr::kable(top_programs, 
+             col.names = c("Code", "Program Name", "Applications", 
+                          "Enrollments", "Conversion Rate (%)"),
+             digits = c(0, 0, 0, 0, 1))
+```
+
+```{r}
+#| label: institution-analysis
+
+# Top institutions 
+top_institutions <- applications_enriched %>%
+  filter(!is.na(school)) %>%
+  group_by(instellingserkenningscode, school) %>%
+  summarise(
+    applications = n(),
+    conversions = sum(status == "ENROLLED", na.rm = TRUE),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(applications)) %>%
+  head(10)
+
+# Display top institutions
+knitr::kable(top_institutions, 
+             col.names = c("BRIN", "Institution", "Applications", 
+                          "Enrollments", "Conversion Rate (%)"),
+             digits = c(0, 0, 0, 0, 1))
+```
+
+```{r}
+#| label: program-conversion-interactive
+
+# Visualize program conversion rates (interactive)
+plot_ly(top_programs, 
+        x = ~reorder(Opleidingsnaam, conversion_rate), 
+        y = ~conversion_rate, 
+        type = "bar",
+        text = ~paste0(round(conversion_rate, 1), "%"),
+        hoverinfo = "text+x",
+        marker = list(color = ~conversion_rate, 
+                     colorscale = "Viridis")) %>%
+  layout(title = "Conversion Rates by Top Programs",
+         xaxis = list(title = ""),
+         yaxis = list(title = "Conversion Rate (%)"),
+         margin = list(b = 120),
+         xaxis = list(tickangle = 45))
+```
+
+## 5. Geographic Analysis
+
+If we have postcode data, we can analyze the geographic distribution of applications:
+
+```{r}
+#| label: geographic-analysis
+
+# Count applications by postcode (first 2 digits)
+postcode_data <- applications_enriched %>%
+  filter(!is.na(postcodecijfers)) %>%
+  mutate(postcode_prefix = substr(postcodecijfers, 1, 2)) %>%
+  group_by(postcode_prefix) %>%
+  summarise(
+    applications = n(),
+    conversions = sum(status == "ENROLLED", na.rm = TRUE),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(applications))
+
+# Display top postcodes
+head(postcode_data, 10) %>%
+  knitr::kable(
+    col.names = c("Postcode Region", "Applications", "Enrollments", "Conversion Rate (%)"),
+    digits = c(0, 0, 0, 1)
+  )
+```
+
+```{r}
+#| label: postcode-visualization
+
+# Sample visualization of applications by postcode region
+ggplot(head(postcode_data, 20), 
+       aes(x = reorder(postcode_prefix, applications), y = applications)) +
+  geom_col(fill = "navy") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Applications by Postcode Region (Top 20)",
+       x = "Postcode Region",
+       y = "Number of Applications") +
+  scale_y_continuous(labels = comma)
+```
+
+## 6. Crossing Patterns Analysis
+
+Let's see the most common patterns of students applying to multiple institutions:
+
+```{r}
+#| label: crossing-patterns
+
+# For students with multiple applications, analyze movement patterns
+institution_patterns <- applications_enriched %>%
+  filter(!is.na(school)) %>%
+  group_by(bsnhash, schooljaar) %>%
+  filter(n() > 1) %>%  # Only students with multiple applications
+  summarise(
+    institutions = paste(sort(unique(school)), collapse = " → "),
+    is_enrolled = any(status == "ENROLLED"),
+    .groups = "drop"
+  ) %>%
+  group_by(institutions) %>%
+  summarise(
+    student_count = n(),
+    conversion_count = sum(is_enrolled),
+    conversion_rate = mean(is_enrolled) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(student_count))
+
+# Display top crossing patterns
+head(institution_patterns, 10) %>%
+  knitr::kable(
+    col.names = c("Institution Pattern", "Students", "Enrollments", "Conversion Rate (%)"),
+    digits = c(0, 0, 0, 1)
+  )
+```
+
+## 7. Temporal Analysis
+
+Let's examine application timing and its relationship to conversion:
+
+```{r}
+#| label: temporal-analysis
+
+# Convert dates to proper format
+applications_temporal <- applications_enriched %>%
+  mutate(begindatum = as.Date(begindatum))
+
+# Group by month
+monthly_applications <- applications_temporal %>%
+  mutate(month = floor_date(begindatum, "month")) %>%
+  group_by(month) %>%
+  summarise(
+    applications = n(),
+    conversions = sum(status == "ENROLLED", na.rm = TRUE),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(month)
+```
+
+```{r}
+#| label: monthly-volume-plot
+
+# Visualize monthly pattern
+ggplot(monthly_applications, aes(x = month)) +
+  geom_line(aes(y = applications), color = "blue", size = 1) +
+  geom_point(aes(y = applications), color = "blue", size = 2) +
+  theme_minimal() +
+  labs(title = "Monthly Application Volumes",
+       x = "Month",
+       y = "Number of Applications") +
+  scale_y_continuous(labels = comma)
+```
+
+```{r}
+#| label: monthly-conversion-plot
+
+# Visualize conversion rate over time
+ggplot(monthly_applications, aes(x = month, y = conversion_rate)) +
+  geom_line(color = "green4", size = 1) +
+  geom_point(color = "green4", size = 2) +
+  theme_minimal() +
+  labs(title = "Monthly Conversion Rates",
+       x = "Month",
+       y = "Conversion Rate (%)") +
+  scale_y_continuous(labels = function(x) paste0(x, "%"))
+```
+
+## Next Steps
+
+This analysis forms the foundation for our Shiny app implementation. Key findings to highlight in the interactive dashboard:
+
+1. Overall trends in application volume and conversion rates across years
+2. The impact of multiple applications on conversion likelihood
+3. Geographic patterns in application origin
+4. Institution crossing patterns
+5. Temporal patterns in application timing
+
+The next steps are to:
+1. Refine these analyses based on stakeholder feedback
+2. Convert the static visualizations to interactive components
+3. Implement the filtering functionality
+4. Structure the app into logical modules following the Golem framework
