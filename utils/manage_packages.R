@@ -50,7 +50,7 @@ packages_cran <- c(
     "janitor",        # Clean up names from special characters
     "lubridate",      # Work with dates and times
     "purrr",          # Work with functions and vectors
-    #"readxl",         # Read xlsx
+    "readxl",         # Read xlsx
     "readr",          # Read data (csv, tsv, and fwf)
     #"fs",             # Work with file systems
     #"rvest",          # Read html

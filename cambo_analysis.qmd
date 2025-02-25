@@ -1,0 +1,422 @@
+---
+title: "CAMBO_analysis"
+format: html
+---
+
+
+
+```{r}
+#| cache: false
+#| output: false
+#| include: false
+#| freeze: false
+
+## The above settings ensure there is no visible output for the setup script below
+source("00_setup.R")
+
+
+```
+
+## Inladen data
+
+Laad de aanmeldingen in. Postcodecijfers zijn soms character values, opleidingscode is dat ook (al zou je eigenlijk verwachten dat dit numeriek is). Zie exploratie.
+
+```{r}
+
+applications <- suppressWarnings(safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+                      delim = ",",
+                      col_types = cols(
+                          #postcodecijfers = col_character(),
+                          #opleidingcode = col_integer(),
+                          .default = col_guess())
+                      ))
+
+```
+
+Based on the context, here's a first exploratory function to examine the applications data:
+
+Based on the data shown, here's a visualization of different sources over the years using ggplot2:
+
+```{r}
+applications |>
+    group_by(schooljaar, statussource) |>
+    summarise(count = n(), .groups = "drop") |>
+    ggplot(aes(
+        x = factor(schooljaar),
+        y = count,
+        fill = statussource
+    )) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = "School Year", y = "Count", fill = "Status Source") +
+    theme_minimal() +
+    scale_y_continuous(labels = scales::comma)
+```
+
+```{r}
+
+applications |> 
+  summarise(
+    total_records = n(),
+    unique_students = n_distinct(bsnhash),
+    unique_programs = n_distinct(opleidingcode),
+    unique_institutions = n_distinct(instellingserkenningscode),
+    date_range = paste(format(min(begindatum), "%Y-%m-%d"), "to", format(max(begindatum), "%Y-%m-%d")),
+    enrollment_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100
+  )
+```
+
+This gives a high-level overview of the dataset, showing counts of total records, unique students, programs, and institutions, as well as the date range and overall enrollment percentage.
+Laad 'reference data' in. Dit zijn de opleidingen en de instellingen o.b.v. de codes in de aanmeldingen.
+
+```{r}
+
+brin <- read_excel("data/reference/BRIN.xlsx")
+programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
+
+
+```
+
+## Exploratie
+
+De version in 68% van de gevallen 0, beschrijving is 'nvt'.
+```{r}
+tabyl(applications$version)
+```
+
+In meer dan de helft van de gevallen NA, verder niet te interpreteren.
+
+```{r}
+applications_created_by <- tabyl(applications$createdby)
+applications_last_modified_by <- tabyl(applications$lastmodifiedby)
+```
+
+De 'caketenid' staat wel in data, maar in metadata. Vermoedelijk ook niet interessant.
+
+In meer dan de helft van de gevallen NA, niet in meta data, verder niet te interpreteren.
+```{r}
+applications_ca_keten_id <- tabyl(applications$caketenid)
+```
+
+NB: De 'einddatum' en 'afwijkendeopleidingsduur' staan wel genoemd in metadata, maar ontbreken in data, vermoedelijk is dit niet belangrijk.
+
+
+Schooljaar in helft van gevallen 0
+
+```{r}
+tabyl(applications$schooljaar)
+```
+
+Startmoment niet altijd begin van de maand (1.1%)
+```{r}
+# TODO startmoment afgeleide maken naar eerste van de maand
+applications_start_moment <- tabyl(applications$startmoment)
+
+startmoment_not_01 <- applications |>
+    summarise(
+        not_first_day = sum(!str_ends(startmoment, "-01"), na.rm = TRUE),
+        total = n(),
+        percentage = round(not_first_day / total * 100, 1)
+    )
+
+startmoment_not_01
+```
+
+Minder dan 1% van opleidingscodes heeft een niet-numerieke waarde
+```{r}
+
+applications_program_codes <- applications |> tabyl(opleidingcode)
+
+applications_program_codes |>
+  mutate(is_non_numeric = !str_detect(opleidingcode, "^\\d+$")) |>
+  group_by(is_non_numeric) |>
+  summarise(total = sum(n)) |>
+  mutate(percentage = total / sum(total) * 100)
+
+```
+
+## Data join
+
+```{r}
+
+applications_dimensions <- applications |>
+    # set opleidingcode to integer, this removes 1% of values, but those can't be joined anyway
+    mutate(opleidingcode = as.integer(opleidingcode)) |>
+    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) |>
+    left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
+
+```
+
+## Analysis
+
+### Grouping 
+
+De variabelen leeftijdscategorie en postcodecijfers veranderen over tijd, dat maakt groeping lastig.
+Ik pak nu de leeftijd en postcode op laatste datum. Misschien zou voor postcode begindatum beter zijn. Voor leeftijd zou je simpelweg een peildatum willen doen. Bijv. 1 oktober op jaar waarop studenten zich aanmelden.
+
+```{r}
+applications_grouped <- applications_dimensions |>
+    mutate(begindatum = as.Date(begindatum)) |>
+    group_by(bsnhash, schooljaar, opleidingcode, Opleidingsnaam, instellingserkenningscode, school) |>
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        leeftijdscategorie = leeftijdscategorie[which.max(begindatum)],
+        postcodecijfers = postcodecijfers[which.max(begindatum)],
+        .groups = "drop"
+    )
+```
+
+
+```{r}
+
+# leeftijdscategorie postcodecijfers
+
+applications_grouped <- applications_dimensions |>
+    mutate(begindatum = as.Date(begindatum)) |>
+    group_by(bsnhash, schooljaar, opleidingcode, Opleidingsnaam, instellingserkenningscode, school) |>
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        #application_started_before_start = as.numeric(min(begindatum) - max(startmoment)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
+```
+
+```{r}
+
+# leeftijdscategorie postcodecijfers
+
+applications_grouped2 <- applications_dimensions |>
+    mutate(begindatum = as.Date(begindatum)) |>
+    group_by(
+        bsnhash,
+        schooljaar,
+        opleidingcode,
+        Opleidingsnaam,
+        instellingserkenningscode,
+        school,
+        leeftijdscategorie,
+        postcodecijfers
+    ) |> 
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        #application_started_before_start = as.numeric(min(begindatum) - max(startmoment)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
+```
+
+```{r}
+
+# leeftijdscategorie postcodecijfers
+
+applications_grouped3 <- applications_dimensions |>
+    mutate(begindatum = as.Date(begindatum)) |>
+    group_by(
+        bsnhash,
+        schooljaar,
+        opleidingcode,
+        Opleidingsnaam,
+        instellingserkenningscode,
+        school,
+        leeftijdscategorie#,
+        #postcodecijfers
+    ) |> 
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        #application_started_before_start = as.numeric(min(begindatum) - max(startmoment)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
+```
+
+```{r}
+
+# leeftijdscategorie postcodecijfers
+
+applications_grouped4 <- applications_dimensions |>
+    mutate(begindatum = as.Date(begindatum)) |>
+    group_by(
+        bsnhash,
+        schooljaar,
+        opleidingcode,
+        Opleidingsnaam,
+        instellingserkenningscode,
+        school,
+        #leeftijdscategorie,
+        postcodecijfers
+    ) |> 
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        #application_started_before_start = as.numeric(min(begindatum) - max(startmoment)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
+```
+
+### Conversion
+
+```{r}
+
+applications_grouped_multiple <- applications_grouped |>
+    group_by(bsnhash, schooljaar) |>
+    add_tally(name = "applications_total_number") |>
+    ungroup() |>
+    group_by(bsnhash, schooljaar, instellingserkenningscode) |>
+    add_tally(name = "applications_total_number_within_institution") |>
+    ungroup() |>
+    group_by(bsnhash, schooljaar) |>
+    mutate(applications_total_number_of_institutions = length(unique(instellingserkenningscode))) |>
+    ungroup()
+
+```
+
+```{r}
+
+applications_grouped_multiple_bools <- applications_grouped_multiple |>
+    mutate(
+        applications_is_multiple = applications_total_number > 1,
+        applications_is_multiple_within_institution = applications_total_number_within_institution > 1,
+        applications_is_multiple_across_institutions = applications_total_number_of_institutions > 1
+    )
+
+```
+
+
+De conversie van de groepen lijkt erg stabiel over de jaren heen
+
+```{r}
+
+applications_conversion <- applications_grouped_multiple_bools |>
+    group_by(
+        schooljaar,
+        applications_is_multiple,
+        applications_is_multiple_within_institution,
+        applications_is_multiple_across_institutions
+    ) |> 
+    summarise(
+        total = n(),
+        is_enrolled = sum(is_enrolled, na.rm = TRUE),
+        .groups = "drop"
+        ) |>
+    group_by(schooljaar) |>
+    mutate(percentage = is_enrolled / sum(total) * 100) |>
+    ungroup()
+
+applications_conversion_2023_2024 <- applications_conversion |>
+    filter(schooljaar %in% c(2023, 2024))
+
+```
+
+Based on your request for a visualization showing differences between 2023 and 2024, here's a cleaner and more readable version of the plot:
+
+```{r}
+applications_conversion_2023_2024 |>
+  mutate(
+    pattern_label = case_when(
+      !applications_is_multiple ~ "Single application",
+      applications_is_multiple_within_institution & !applications_is_multiple_across_institutions ~ "Multiple within institution",
+      !applications_is_multiple_within_institution & applications_is_multiple_across_institutions ~ "Multiple across institutions",
+      TRUE ~ "Multiple within and across"
+    )
+  ) |>
+  ggplot(aes(x = factor(schooljaar), y = percentage, fill = pattern_label)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "School Year",
+    y = "Conversion Rate (%)",
+    fill = "Application Pattern"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```
+
+## Overig
+
+Weinig wisselingen (1.9%) tussen leertrajecten gedurende aanmelding
+```{r}
+
+leertraject_wisselingen <- tabyl(applications_grouped$leertrajectmbo)
+
+```
+
+```{r}
+
+ggplot(applications_grouped, aes(x = factor(schooljaar), fill = leertrajectmbo)) +
+    geom_bar(position = "fill") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(x = "Schooljaar", y = "Percentage", fill = "Leertraject MBO") +
+    theme_minimal()
+
+```
+
+```{r}
+applications_grouped_table <- applications_grouped |>
+    mutate(has_change = str_detect(leertrajectmbo, ",")) |>
+    group_by(has_change) |>
+    summarise(total = n(),
+              .groups = "drop") |>
+    mutate(percentage = round(total / sum(total) * 100, 1))
+
+
+```
+
+
+```{r}
+
+#Based on the context and data, I'll create a visualization to show the conversion rates across different application patterns for 2023 and 2024. Here's the code:
+    
+    ggplot(applications_conversion_2023_2024, 
+           aes(x = factor(schooljaar), 
+               y = percentage,
+               fill = interaction(
+                   applications_is_multiple,
+                   applications_is_multiple_within_institution,
+                   applications_is_multiple_across_institutions
+               ))) +
+    geom_col(position = "dodge") +
+    scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+    labs(
+        x = "Schooljaar",
+        y = "Conversie percentage",
+        fill = "Aanmeldingspatroon"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+
+```
+
+
+
+## Opmerkingen
+
+Is het handig om schooljaren te filteren (alleen 2023 en 2024)?
+
+Variabelen die interessant zouden kunnen zijn:
+	- Geslacht
+	- Betaald of niet
+	- Iets van vooropleiding?
+	
+Variabelen die afgeleid kunnen worden:
+    - Reisafstand (als locatie-code gekoppeld kan worden)
+	- Numerus fixus opleiding, kan uit opleidingscode en BRIN worden afgeleid?
+	- Opleidingsniveau, kan uit opleidingscode worden afgeleid?
