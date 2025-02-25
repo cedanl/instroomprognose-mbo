@@ -3,6 +3,5 @@ default:
   data_base_dir: "data/synthetic"
   brin_code: "24ZZ"
 
-graafschap_college:
-  data_base_dir: "data/graafschap_college"
-  brin_code: "24ZZ"
+cambo:
+  data_base_dir: "data/cambo"

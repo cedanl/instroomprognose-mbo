@@ -14,4 +14,4 @@ source("utils/manage_packages.R")
 load_all()
 
 # TODO Change default in own config if needed
-# Sys.setenv(R_CONFIG_ACTIVE = "default")
+Sys.setenv(R_CONFIG_ACTIVE = "cambo")
