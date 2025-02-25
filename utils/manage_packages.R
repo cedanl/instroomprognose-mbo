@@ -39,10 +39,19 @@ packages_cran <- c(
 
     # quarto
     "quarto",
+    "knitr",
 
-
-    "cli",            # Create command line interfaces
+    # visualisation
     "ggplot2" ,       # Create plots
+    "scales",
+    "DT",
+    "gt",
+    "leaflet",
+    "plotly",
+    "sf",
+
+    # main
+    "cli",            # Create command line interfaces
     #"LaF",            # Read data files without encoding (like ASCII)
     #"dataReporter",   # Create a data audit report
     # "rlang",          # Enable complex operations
