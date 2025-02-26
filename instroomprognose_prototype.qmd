@@ -1,6 +1,15 @@
 ---
 title: "Student Inflow Analysis - MVP Prototype"
-format: html
+format: 
+  html:
+    toc: true
+    code-fold: true
+    code-summary: "Laat code zien"
+execute:
+  cache: true
+  freeze: auto
+  include: true
+  warning: false
 ---
 
 ```{r}
@@ -15,16 +24,18 @@ source("00_setup.R")
 
 ```
 
-## 1. Data Loading & Preparation
+## 1. Data inladen & prepareren
 
-First, let's load the application data and reference tables:
+We laten de data in.
 
 ```{r}
 #| label: load-data
+#| freeze: true
+#| cache: false
 
-applications <- suppressWarnings(safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+applications <- safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
                       delim = ",",
-                      col_types = cols(.default = col_guess())))
+                      col_types = cols(.default = col_guess()))
 
 # Load reference data
 brin <- read_excel("data/reference/BRIN.xlsx")
@@ -38,14 +49,14 @@ applications_enriched <- applications %>%
     left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
 ```
 
-## 2. Application Overview Dashboard
+## 2. Dashboard Aanmeldingsoverzicht
 
-Let's create key KPIs and visualizations that would form our main dashboard:
+Hier creëren we KPI's en visualisaties die ons hoofddashboard zullen vormen. Door trends over de jaren heen te analyseren, kunnen we inzicht krijgen in het aanmeldingsvolume en conversiepercentages. Dit is essentieel om te begrijpen of er specifieke jaren zijn met afwijkende patronen.
 
 ```{r}
 #| label: dashboard-metrics
 
-# Calculate key metrics by year
+# Berekenen van hoofdmetrieken per jaar
 yearly_metrics <- applications_enriched %>%
   group_by(schooljaar) %>%
   summarise(
@@ -56,328 +67,968 @@ yearly_metrics <- applications_enriched %>%
   ) %>%
   arrange(schooljaar)
 
-# Display metrics table
-knitr::kable(yearly_metrics, 
-             col.names = c("School Year", "Total Applications", "Unique Students", "Conversion Rate (%)"),
-             digits = c(0, 0, 0, 1))
+# Toon metrieken in een mooie tabel met gt i.p.v. knitr
+yearly_metrics %>%
+  gt() %>%
+  tab_header(
+    title = "Jaarlijkse Aanmeldingsstatistieken"
+  ) %>%
+  cols_label(
+    schooljaar = "Schooljaar",
+    total_applications = "Totaal aantal rijen",
+    unique_students = "Unieke Studenten"#,
+    #conversion_rate = "Conversiepercentage (%)"
+  ) %>%
+  fmt_number(
+    columns = c(total_applications, unique_students),
+    decimals = 0,
+    use_seps = TRUE
+  ) %>%
+  # fmt_percent(
+  #   columns = conversion_rate,
+  #   decimals = 1,
+  #   scale_values = FALSE
+  # ) %>%
+  tab_style(
+    style = cell_fill(color = "#f5f5f5"),
+    locations = cells_body(rows = schooljaar %in% c(2023, 2024))
+  )
 ```
+
+We zien hierboven duidelijke verschillen in het aantal aanmeldingen per jaar. Het is opvallend dat jaar 0 (wat een datakwaliteitsprobleem kan aanduiden) en de jaren 2023 en 2024 aanzienlijk meer aanmeldingen bevatten dan andere jaren. Laten we deze data visualiseren om de verschillen nog duidelijker te maken.
 
 ```{r}
 #| label: yearly-trend-plot
 
-# Create trend visualization
+# Visualisatie van trends
 yearly_metrics %>%
   pivot_longer(cols = c(total_applications, unique_students), 
                names_to = "metric", 
                values_to = "value") %>%
   mutate(metric = if_else(metric == "total_applications", 
-                         "Total Applications", 
-                         "Unique Students")) %>%
+                         "Totaal Aanmeldingen", 
+                         "Unieke Studenten")) %>%
   ggplot(aes(x = factor(schooljaar), y = value, group = metric, color = metric)) +
   geom_line(size = 1.2) +
   geom_point(size = 3) +
   theme_minimal() +
-  labs(title = "Application Trends by Year",
-       x = "School Year",
-       y = "Count",
-       color = "Metric") +
+  labs(title = "Trend van Aanmeldingen per Jaar",
+       subtitle = "Vergelijking tussen totaal aantal aanmeldingen en unieke studenten",
+       x = "Schooljaar",
+       y = "Aantal",
+       color = "Metriek") +
   scale_y_continuous(labels = comma) +
   theme(legend.position = "bottom")
+
 ```
+
+
+### Conclusie Aanmeldingsoverzicht
+
+Uit de analyse van de aanmeldingsgegevens over verschillende jaren blijkt dat we te maken hebben met aanzienlijke datakwaliteitsproblemen in eerdere jaren. Het jaar 0 bevat een groot aantal aanmeldingen, wat waarschijnlijk duidt op ontbrekende jaarinformatie. Daarnaast zien we dat de jaren 2023 en 2024 veel vollediger zijn dan eerdere jaren.
+Voor verdere analyses zullen we ons daarom concentreren op alleen de jaren 2023 en 2024, omdat:
+
+1. Deze jaren de meest recente en relevante informatie bevatten
+2. De datakwaliteit en -volledigheid voor deze jaren veel beter is
+3. We daarmee werken met een consistente dataset voor trendanalyses
 
 ```{r}
-#| label: conversion-rate-plot
+#| label: filter-recent-years
 
-# Conversion rate visualization
-ggplot(yearly_metrics, aes(x = factor(schooljaar), y = conversion_rate)) +
-  geom_col(fill = "steelblue") +
-  geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
-            vjust = -0.5, size = 3.5) +
-  theme_minimal() +
-  labs(title = "Conversion Rate by Year",
-       x = "School Year",
-       y = "Conversion Rate (%)") +
-  ylim(0, max(yearly_metrics$conversion_rate) * 1.1)
+# Filter voor recente jaren (2023 en 2024)
+applications_recent <- applications_enriched %>%
+  filter(schooljaar %in% c(2023, 2024))
+
+# Toon aantal rijen na filtering
+cat(sprintf("Aantal rijen na filtering op 2023-2024: %d\n", nrow(applications_recent)))
+cat(sprintf("Percentage van originele data: %.1f%%\n", 
+            nrow(applications_recent) / nrow(applications_enriched) * 100))
+
 ```
 
-## 3. Double Application Analysis
+## 3. Analyse van dubbele aanmeldingen
 
-One of our key features is analyzing students who apply to multiple programs or institutions:
+Een belangrijke focus voor werving en voorlichting is het analyseren van studenten die zich aanmelden voor meerdere opleidingen of instellingen. Het begrijpen van dit gedrag kan helpen bij het ontwikkelen van gerichte strategieën.
+
+Een cruciale observatie uit de data is dat één aanmelding meerdere regels in de dataset kan hebben. Dit komt doordat elke statuswijziging (bijv. van "SUBMITTED" naar "OFFERED" of naar "ENROLLED") wordt vastgelegd als een nieuwe regel. Om correcte analyses te kunnen doen, moeten we eerst deze rijen groeperen.
 
 ```{r}
 #| label: double-applications
 
 # Identify and analyze double applications
-application_counts <- applications_enriched %>%
-  group_by(bsnhash, schooljaar) %>%
-  summarise(
-    application_count = n(),
-    institutions_count = n_distinct(instellingserkenningscode),
-    programs_count = n_distinct(opleidingcode),
-    is_enrolled = any(status == "ENROLLED"),
-    .groups = "drop"
-  )
+applications_grouped <- applications_recent %>%
+    mutate(begindatum = as.Date(begindatum)) %>%
+    group_by(bsnhash, schooljaar, opleidingcode, Opleidingsnaam, instellingserkenningscode, school) %>%
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
 
-# Distribution of applications per student
-app_distribution <- application_counts %>%
-  group_by(application_count) %>%
+# Toon het verschil in aantal rijen
+cat(sprintf("Aantal rijen vóór groepering: %d\n", nrow(applications_recent)))
+cat(sprintf("Aantal rijen na groepering: %d\n", nrow(applications_grouped)))
+```
+
+Het grote verschil in aantal rijen vóór en na groepering bevestigt hoe belangrijk deze stap is. We zien dat veel aanmeldingen meerdere statuswijzigingen ondergaan, wat kan wijzen op een complex administratief proces.
+
+Nu kunnen we analyseren hoeveel aanmeldingen elke student heeft (alleen eerste 10 rijen worden getoond):
+
+```{r}
+#| label: analyze-multiple-applications
+
+# We breiden de dataset uit met informatie over meervoudige aanmeldingen
+applications_grouped_multiple <- applications_grouped %>%
+    group_by(bsnhash, schooljaar) %>%
+    add_tally(name = "applications_total_number") %>%
+    ungroup() %>%
+    group_by(bsnhash, schooljaar, instellingserkenningscode) %>%
+    add_tally(name = "applications_total_number_within_institution") %>%
+    ungroup() %>%
+    group_by(bsnhash, schooljaar) %>%
+    mutate(applications_total_number_of_institutions = length(unique(instellingserkenningscode))) %>%
+    ungroup()
+
+# Voeg boolean flags toe voor verschillende soorten meervoudige aanmeldingen
+applications_grouped_multiple_bools <- applications_grouped_multiple %>%
+    mutate(
+        applications_is_multiple = applications_total_number > 1,
+        applications_is_multiple_within_institution = applications_total_number_within_institution > 1,
+        applications_is_multiple_across_institutions = applications_total_number_of_institutions > 1
+    )
+
+# Analyseer conversiepercentages per type aanmelding
+applications_conversion <- applications_grouped_multiple_bools %>%
+    group_by(
+        schooljaar,
+        applications_is_multiple,
+        applications_is_multiple_within_institution,
+        applications_is_multiple_across_institutions
+    ) %>% 
+    summarise(
+        total = n(),
+        enrolled = sum(is_enrolled, na.rm = TRUE),
+        conversion_rate = mean(is_enrolled, na.rm = TRUE) * 100,
+        .groups = "drop"
+    )
+
+```
+
+```{r}
+#| label: conversion-by-application-type
+
+# Visualisatie van conversie per type aanmelding, gesorteerd op conversiepercentage
+applications_conversion %>%
+  mutate(
+    application_type = case_when(
+      applications_is_multiple_within_institution & applications_is_multiple_across_institutions ~ 
+        "Opleidingen binnen én tussen instellingen",
+      applications_is_multiple_within_institution ~ "Opleidingen binnen dezelfde instelling",
+      applications_is_multiple_across_institutions ~ "Zelfde opleiding bij verschillende instellingen",
+      TRUE ~ "Slechts één aanmelding"
+    )
+  ) %>%
+  # Bereken het gemiddelde conversiepercentage per type aanmelding voor sortering
+  group_by(application_type) %>%
+  mutate(avg_conversion = mean(conversion_rate)) %>%
+  ungroup() %>%
+  # Nu de visualisatie
+  ggplot(aes(x = reorder(application_type, -avg_conversion), y = conversion_rate, fill = factor(schooljaar))) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 3) +
+  scale_fill_brewer(palette = "Set1") +
+  scale_y_continuous(limits = c(0, 75)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Conversiepercentage per Type Meervoudige Aanmelding",
+       subtitle = "Vergelijking tussen 2023 en 2024",
+       x = NULL,
+       y = "Conversiepercentage (%)",
+       fill = "Schooljaar")
+
+```
+
+```{r}
+#| label: multiple-applications-count
+
+# Visualisatie van verdeling van het aantal aanmeldingen per student
+applications_count_distribution <- applications_grouped_multiple %>%
+  select(bsnhash, schooljaar, applications_total_number) %>%
+  distinct() %>%
+  group_by(schooljaar, applications_total_number) %>%
   summarise(
     students = n(),
-    converted = sum(is_enrolled),
-    conversion_rate = mean(is_enrolled) * 100,
     .groups = "drop"
   ) %>%
+  group_by(schooljaar) %>%
   mutate(
     students_pct = students / sum(students) * 100
+  ) %>%
+  ungroup() %>%
+  filter(applications_total_number <= 10)  # Beperk tot 10 voor visualisatie
+
+# Toon alleen de eerste 10 waarden voor overzichtelijkheid
+ggplot(applications_count_distribution %>% filter(schooljaar %in% c(2023, 2024)), 
+       aes(x = students_pct, 
+           fill = factor(schooljaar, levels = c("2024", "2023")),
+           y = reorder(factor(applications_total_number), -as.numeric(applications_total_number))))  +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(students_pct, 1), "%")), 
+            position = position_dodge(width = 0.9),
+            hjust = -0.2, size = 3) +
+  scale_fill_brewer(palette = "Set1") +
+    scale_x_continuous(limits = c(0, 100)) +
+  theme_minimal() +
+  labs(title = "Verdeling van Aantal Aanmeldingen per Student",
+       subtitle = "Percentage studenten per aantal aanmeldingen",
+              x = "Percentage Studenten (%)",
+       y = "Aantal Aanmeldingen per Student",
+       fill = "Schooljaar")
+
+```
+
+We zien hierboven dat de meeste studenten slechts één aanmelding hebben, maar een significant aantal heeft meerdere aanmeldingen. Laten we dit visualiseren:
+
+```{r}
+#| label: multiple-application-count
+
+# Correct calculation of conversion rates by application count
+# First, get student-level enrollment status
+student_enrollment <- applications_grouped_multiple %>%
+  select(bsnhash, schooljaar, applications_total_number, is_enrolled) %>%
+  group_by(bsnhash, schooljaar) %>%
+  summarise(
+    applications_total_number = first(applications_total_number),
+    student_enrolled = any(is_enrolled),
+    .groups = "drop"
   )
 
-# Display the distribution
-knitr::kable(app_distribution, 
-             col.names = c("Applications per Student", "Student Count", 
-                          "Enrolled", "Conversion Rate (%)", "% of Total"),
-             digits = c(0, 0, 0, 1, 1))
-```
+# Then calculate conversion rates per application count
+conversion_by_count <- student_enrollment %>%
+  group_by(schooljaar, applications_total_number) %>%
+  summarise(
+    students = n(),
+    converted_students = sum(student_enrolled),
+    student_conversion_rate = mean(student_enrolled) * 100,
+    .groups = "drop"
+  ) %>%
+  filter(applications_total_number <= 10)  # Limit to 10 for visualization
 
-```{r}
-#| label: app-count-distribution
+# Calculate application-level conversion rate
+conversion_by_count <- conversion_by_count %>%
+  mutate(
+    application_conversion_rate = converted_students / (students * applications_total_number) * 100
+  )
 
-# Visualization: Application count distribution
-ggplot(app_distribution, aes(x = factor(application_count), y = students)) +
-  geom_col(fill = "darkcyan") +
-  geom_text(aes(label = paste0(round(students_pct, 1), "%")), 
-            vjust = -0.5, size = 3) +
+# Visualize application-level conversion rate with flipped axes and reversed order
+ggplot(conversion_by_count %>% filter(schooljaar %in% c(2023, 2024)), 
+       aes(y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)), 
+           x = application_conversion_rate, 
+           fill = factor(schooljaar, levels = c("2024", "2023")))) +  # Reverse year order
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(application_conversion_rate, 1), "%")), 
+            position = position_dodge(width = 0.9),
+            color = "white",
+            hjust = 1, size = 3) +
+  scale_fill_brewer(palette = "Set1") +
   theme_minimal() +
-  labs(title = "Distribution of Applications per Student",
-       x = "Number of Applications",
-       y = "Number of Students") +
-  scale_y_continuous(labels = comma)
+  labs(title = "Conversiepercentage per Aanmelding naar Aantal Aanmeldingen",
+       subtitle = "Percentage van aanmeldingen dat resulteert in inschrijving",
+       y = "Aantal Aanmeldingen per Student",
+       x = "Conversie per Aanmelding (%)",
+       fill = "Schooljaar")
+
+
 ```
 
-```{r}
-#| label: conversion-by-app-count
+### Inzichten Dubbele Aanmeldingen
 
-# Conversion rates by application count
-ggplot(app_distribution, aes(x = factor(application_count), y = conversion_rate)) +
-  geom_col(fill = "darkgoldenrod") +
-  geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
-            vjust = -0.5, size = 3) +
-  theme_minimal() +
-  labs(title = "Conversion Rate by Number of Applications",
-       x = "Number of Applications",
-       y = "Conversion Rate (%)") +
-  ylim(0, max(app_distribution$conversion_rate) * 1.1)
-```
+Deze analyse biedt belangrijke inzichten in het aanmeldingsgedrag van studenten:
 
-## 4. Program and Institution Analysis
+1. De meerderheid van de studenten (meer dan 80%) heeft slechts één aanmelding
+2. Studenten met meerdere aanmeldingen hebben vaak een hogere kans om zich daadwerkelijk in te schrijven
+3. We zien een interessante piek in conversie bij studenten die precies 2 aanmeldingen hebben
+4. Bij meer dan 5 aanmeldingen neemt de conversiekans meestal af, wat kan duiden op meer onzekerheid
 
-Let's analyze which programs and institutions have the highest application volumes and conversion rates:
+Deze inzichten kunnen gebruikt worden voor gerichte begeleiding van studenten met meerdere aanmeldingen, aangezien zij een hogere conversiekans vertegenwoordigen maar ook meer begeleiding kunnen nodig hebben bij hun studiekeuze.
+
+## 4. Analyse van Opleidingen en Instellingen
+
+Laten we analyseren welke opleidingen en instellingen de hoogste en laagste aanmeldingsvolumes en conversiepercentages hebben. Dit helpt bij het identificeren van succesvolle programma's en potentiële verbeterpunten.
+
+Let op: Ik heb gefilterd bij opleidingen op minimaal 50 en bij instellingen op minimaal 100. Het ROC van Amsterdam had minder aanmeldingen. 
 
 ```{r}
 #| label: program-analysis
 
-# Top programs by application volume
-top_programs <- applications_enriched %>%
+# Top en Laagste opleidingen op basis van aanmeldingsvolume
+# We gebruiken applications_grouped om unieke aanmeldingen te tellen
+top_programs <- applications_grouped %>%
   filter(!is.na(Opleidingsnaam)) %>%
   group_by(opleidingcode, Opleidingsnaam) %>%
   summarise(
     applications = n(),
-    conversions = sum(status == "ENROLLED", na.rm = TRUE),
-    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    conversions = sum(is_enrolled),
+    conversion_rate = mean(is_enrolled) * 100,
     .groups = "drop"
   ) %>%
-  arrange(desc(applications)) %>%
-  head(10)
+  arrange(desc(conversion_rate)) %>%
+    filter(conversions > 50)
 
-# Display top programs
-knitr::kable(top_programs, 
-             col.names = c("Code", "Program Name", "Applications", 
-                          "Enrollments", "Conversion Rate (%)"),
-             digits = c(0, 0, 0, 0, 1))
+# Haal top 5 en Laagste 5 op basis van volume
+top5_programs <- head(top_programs, 5)
+bottom5_programs <- tail(top_programs %>% filter(applications >= 10), 5)  # Minimum van 10 aanmeldingen voor relevantie
+
+# Combineer voor visualisatie
+top_bottom_programs <- bind_rows(
+  mutate(top5_programs, categorie = "Top 5"),
+  mutate(bottom5_programs, categorie = "Laagste 5")
+)
+
+
+```
+
+```{r}
+#| label: programme-table
+
+# Toon top en bottom opleidingen in een mooie tabel
+top_bottom_programs %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 en Laagste 5 Opleidingen op Conversiepercentage",
+    subtitle = "Gebaseerd op gegroepeerde aanmeldingsgegevens van opleidingen met > 50 inschrijvingen"
+  ) %>%
+  cols_label(
+    opleidingcode = "Code",
+    Opleidingsnaam = "Opleidingsnaam",
+    applications = "Aanmeldingen",
+    conversions = "Inschrijvingen",
+    conversion_rate = "Conversie (%)",
+    categorie = "Categorie"
+  ) %>%
+  fmt_number(
+    columns = c(applications, conversions),
+    decimals = 0
+  ) %>%
+  fmt_percent(
+    columns = conversion_rate,
+    decimals = 1,
+    scale_values = FALSE
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#e6f7ff")
+    ),
+    locations = cells_body(
+      rows = conversion_rate > mean(top_bottom_programs$conversion_rate)
+    )
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#ccffcc")
+    ),
+    locations = cells_body(
+      rows = categorie == "Top 5"
+    )
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#ffcccc")
+    ),
+    locations = cells_body(
+      rows = categorie == "Laagste 5"
+    )
+  )
+
 ```
 
 ```{r}
 #| label: institution-analysis
 
-# Top institutions 
-top_institutions <- applications_enriched %>%
-  filter(!is.na(school)) %>%
+# Top en bottom instellingen op basis van aanmeldingsvolume
+top_institutions <- applications_grouped %>%
+  #filter(!is.na(school)) %>%
   group_by(instellingserkenningscode, school) %>%
   summarise(
     applications = n(),
-    conversions = sum(status == "ENROLLED", na.rm = TRUE),
-    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    conversions = sum(is_enrolled),
+    conversion_rate = mean(is_enrolled) * 100,
     .groups = "drop"
   ) %>%
-  arrange(desc(applications)) %>%
-  head(10)
+  arrange(desc(conversion_rate)) %>%
+    filter(applications > 100)
 
-# Display top institutions
-knitr::kable(top_institutions, 
-             col.names = c("BRIN", "Institution", "Applications", 
-                          "Enrollments", "Conversion Rate (%)"),
-             digits = c(0, 0, 0, 0, 1))
+# Haal top 5 en bottom 5 op basis van volume
+top5_institutions <- head(top_institutions, 5)
+bottom5_institutions <- tail(top_institutions %>% filter(applications >= 10), 5)  # Minimum van 10 aanmeldingen voor relevantie
+
+# Combineer voor visualisatie
+top_bottom_institutions <- bind_rows(
+  mutate(top5_institutions, categorie = "Top 5"),
+  mutate(bottom5_institutions, categorie = "Laagste 5")
+)
+
+```
+
+```{r}
+#| label: institution-table
+
+# Toon top en bottom instellingen in een mooie tabel
+top_bottom_institutions %>%
+  gt() %>%
+  tab_header(
+    title = "Top 5 en laagste 5 Instellingen op conversiepercentage",
+    subtitle = "Gebaseerd op gegroepeerde aanmeldingsgegevens"
+  ) %>%
+  cols_label(
+    instellingserkenningscode = "BRIN",
+    school = "Instelling",
+    applications = "Aanmeldingen",
+    conversions = "Inschrijvingen",
+    conversion_rate = "Conversie (%)",
+    categorie = "Categorie"
+  ) %>%
+  fmt_number(
+    columns = c(applications, conversions),
+    decimals = 0
+  ) %>%
+  fmt_percent(
+    columns = conversion_rate,
+    decimals = 1,
+    scale_values = FALSE
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#e6f7ff")
+    ),
+    locations = cells_body(
+      rows = conversion_rate > mean(top_bottom_institutions$conversion_rate)
+    )
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#ccffcc")
+    ),
+    locations = cells_body(
+      rows = categorie == "Top 5"
+    )
+  ) %>%
+  tab_style(
+    style = list(
+      cell_fill(color = "#ffcccc")
+    ),
+    locations = cells_body(
+      rows = categorie == "Laagste 5"
+    )
+  )
+
 ```
 
 ```{r}
 #| label: program-conversion-interactive
 
-# Visualize program conversion rates (interactive)
-plot_ly(top_programs, 
-        x = ~reorder(Opleidingsnaam, conversion_rate), 
-        y = ~conversion_rate, 
-        type = "bar",
-        text = ~paste0(round(conversion_rate, 1), "%"),
-        hoverinfo = "text+x",
-        marker = list(color = ~conversion_rate, 
-                     colorscale = "Viridis")) %>%
-  layout(title = "Conversion Rates by Top Programs",
-         xaxis = list(title = ""),
-         yaxis = list(title = "Conversion Rate (%)"),
-         margin = list(b = 120),
-         xaxis = list(tickangle = 45))
-```
+# Bereid data voor, behandel Top 5 en Laagste 5 als afzonderlijke datasets
+top5_programs <- top_bottom_programs %>% 
+  filter(categorie == "Top 5") %>%
+  arrange(desc(conversion_rate)) %>%
+  mutate(
+    text_position = "inside",
+    text_color = "black"
+  )
 
-## 5. Geographic Analysis
+bottom5_programs <- top_bottom_programs %>% 
+  filter(categorie == "Laagste 5") %>%
+  arrange(desc(conversion_rate)) %>%
+  mutate(
+    text_position = "outside",
+    text_color = "black"
+  )
 
-If we have postcode data, we can analyze the geographic distribution of applications:
+# Combineer ze weer in de gewenste volgorde
+ordered_programs <- bind_rows(top5_programs, bottom5_programs) %>%
+  # Maak een clean label zonder de interactie artifacts
+  mutate(
+    display_name = Opleidingsnaam,
+    # Voeg ruwe index toe voor expliciete sortering
+    idx = row_number()
+  )
 
-```{r}
-#| label: geographic-analysis
-
-# Count applications by postcode (first 2 digits)
-postcode_data <- applications_enriched %>%
-  filter(!is.na(postcodecijfers)) %>%
-  mutate(postcode_prefix = substr(postcodecijfers, 1, 2)) %>%
-  group_by(postcode_prefix) %>%
-  summarise(
-    applications = n(),
-    conversions = sum(status == "ENROLLED", na.rm = TRUE),
-    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
-    .groups = "drop"
+# Visualiseer conversiepercentages van top en laagste opleidingen (horizontaal)
+plot_ly() %>%
+  # Voeg laagste 5 toe met tekstlabels aan buitenkant
+  add_trace(
+    data = bottom5_programs,
+    y = ~reorder(Opleidingsnaam, -as.numeric(factor(Opleidingsnaam, levels = ordered_programs$Opleidingsnaam))),
+    x = ~conversion_rate, 
+    type = "bar",
+    name = "Laagste 5",
+    marker = list(color = "#FF9800"),
+    text = ~paste0(round(conversion_rate, 1), "%"),
+    textposition = "outside",
+    outsidetextfont = list(color = "black"),
+    hoverinfo = "text+y"
   ) %>%
-  arrange(desc(applications))
-
-# Display top postcodes
-head(postcode_data, 10) %>%
-  knitr::kable(
-    col.names = c("Postcode Region", "Applications", "Enrollments", "Conversion Rate (%)"),
-    digits = c(0, 0, 0, 1)
+  # Voeg top 5 toe met tekstlabels aan binnenkant
+  add_trace(
+    data = top5_programs,
+    y = ~reorder(Opleidingsnaam, -as.numeric(factor(Opleidingsnaam, levels = ordered_programs$Opleidingsnaam))),
+    x = ~conversion_rate, 
+    type = "bar",
+    name = "Top 5",
+    marker = list(color = "#1976D2"),
+    text = ~paste0(round(conversion_rate, 1), "%"),
+    textposition = "inside",
+    insidetextfont = list(color = "white"),
+    hoverinfo = "text+y"
+  )  %>%
+  layout(
+    title = "Conversiepercentages Top 5 en Laagste 5 Opleidingen",
+    yaxis = list(title = ""),
+    xaxis = list(title = "Conversiepercentage (%)"),
+    margin = list(l = 150, r = 50),  # Extra marge rechts voor outside labels
+    showlegend = TRUE,
+    barmode = "group"
   )
 ```
 
 ```{r}
-#| label: postcode-visualization
+#| label: institution-conversion-interactive
 
-# Sample visualization of applications by postcode region
-ggplot(head(postcode_data, 20), 
-       aes(x = reorder(postcode_prefix, applications), y = applications)) +
-  geom_col(fill = "navy") +
-  coord_flip() +
-  theme_minimal() +
-  labs(title = "Applications by Postcode Region (Top 20)",
-       x = "Postcode Region",
-       y = "Number of Applications") +
-  scale_y_continuous(labels = comma)
-```
+# Bereid data voor, behandel Top 5 en Laagste 5 als afzonderlijke datasets
+top5_institutions <- top_bottom_institutions %>% 
+  filter(categorie == "Top 5") %>%
+  arrange(desc(conversion_rate)) %>%
+  mutate(
+    text_position = "inside",
+    text_color = "white"
+  )
 
-## 6. Crossing Patterns Analysis
+bottom5_institutions <- top_bottom_institutions %>% 
+  filter(categorie == "Laagste 5") %>%
+  arrange(desc(conversion_rate)) %>%
+  mutate(
+    text_position = "outside",
+    text_color = "black"
+  )
 
-Let's see the most common patterns of students applying to multiple institutions:
+# Combineer ze weer in de gewenste volgorde
+ordered_institutions <- bind_rows(top5_institutions, bottom5_institutions) %>%
+  # Maak een clean label zonder de interactie artifacts
+  mutate(
+    display_name = school,
+    # Voeg ruwe index toe voor expliciete sortering
+    idx = row_number()
+  )
 
-```{r}
-#| label: crossing-patterns
-
-# For students with multiple applications, analyze movement patterns
-institution_patterns <- applications_enriched %>%
-  filter(!is.na(school)) %>%
-  group_by(bsnhash, schooljaar) %>%
-  filter(n() > 1) %>%  # Only students with multiple applications
-  summarise(
-    institutions = paste(sort(unique(school)), collapse = " → "),
-    is_enrolled = any(status == "ENROLLED"),
-    .groups = "drop"
+# Visualiseer conversiepercentages van top en laagste instellingen (horizontaal)
+plot_ly() %>%
+  # Voeg laagste 5 toe met tekstlabels aan buitenkant
+  add_trace(
+    data = bottom5_institutions,
+    y = ~reorder(school, -as.numeric(factor(school, levels = ordered_institutions$school))),
+    x = ~conversion_rate, 
+    type = "bar",
+    name = "Laagste 5",
+    marker = list(color = "#FF9800"),
+    text = ~paste0(round(conversion_rate, 1), "%"),
+    textposition = "outside",
+    outsidetextfont = list(color = "black"),
+    hoverinfo = "text+y"
   ) %>%
-  group_by(institutions) %>%
-  summarise(
-    student_count = n(),
-    conversion_count = sum(is_enrolled),
-    conversion_rate = mean(is_enrolled) * 100,
-    .groups = "drop"
+  # Voeg top 5 toe met tekstlabels aan binnenkant
+  add_trace(
+    data = top5_institutions,
+    y = ~reorder(school, -as.numeric(factor(school, levels = ordered_institutions$school))),
+    x = ~conversion_rate, 
+    type = "bar",
+    name = "Top 5",
+    marker = list(color = "#1976D2"),
+    text = ~paste0(round(conversion_rate, 1), "%"),
+    textposition = "inside",
+    insidetextfont = list(color = "white"),
+    hoverinfo = "text+y"
   ) %>%
-  arrange(desc(student_count))
-
-# Display top crossing patterns
-head(institution_patterns, 10) %>%
-  knitr::kable(
-    col.names = c("Institution Pattern", "Students", "Enrollments", "Conversion Rate (%)"),
-    digits = c(0, 0, 0, 1)
+  layout(
+    title = "Conversiepercentages Top 5 en Laagste 5 Instellingen",
+    yaxis = list(title = ""),
+    xaxis = list(title = "Conversiepercentage (%)"),
+    margin = list(l = 150, r = 50),  # Extra marge rechts voor outside labels
+    showlegend = TRUE,
+    barmode = "group"
   )
 ```
 
-## 7. Temporal Analysis
+### Inzichten Opleidingen en Instellingen
 
-Let's examine application timing and its relationship to conversion:
+Deze analyse geeft waardevolle inzichten in de verschillen tussen opleidingen en instellingen:
+
+1. Er zijn grote verschillen in zowel het aantal aanmeldingen als de conversiepercentages tussen opleidingen en instellingen
+2. Populaire opleidingen hebben niet altijd de hoogste conversiepercentages, wat kan wijzen op selectieve toelatingsprocedures
+3. Bij kleine opleidingen en instellingen zien we soms verrassend hoge conversiepercentages, wat kansen voor groei kan aangeven
+4. Deze inzichten kunnen gebruikt worden voor:
+   - Gerichte marketingcampagnes voor opleidingen met groeipotentieel
+   - Analyse van succesvolle conversiestrategieën bij kleinere opleidingen
+   - Identificatie van opleidingen die mogelijk extra ondersteuning nodig hebben bij werving
+
+Door zowel top als bottom opleidingen en instellingen te analyseren, krijgen we een completer beeld van het hele spectrum en kunnen we specifiekere strategieën ontwikkelen.
+
+
+## 5. Tijd Analyse
+
+De timing van aanmeldingen gedurende het jaar is cruciaal voor effectieve marketing en capaciteitsplanning. Door te analyseren wanneer studenten zich aanmelden en hoe dit verband houdt met conversie, kunnen we inzicht krijgen in de meest kritieke periodes in de aanmeldingscyclus.
+
 
 ```{r}
 #| label: temporal-analysis
 
-# Convert dates to proper format
-applications_temporal <- applications_enriched %>%
-  mutate(begindatum = as.Date(begindatum))
+# We hebben de originele data nodig voor de temporele analyse, omdat begindatum  niet behouden wordt in de gegroepeerde data
+# We moeten een aangepaste groepering maken die begindatum behoudt
+applications_grouped_with_date <- applications_recent %>%
+    mutate(begindatum = as.Date(begindatum)) %>%
+    group_by(bsnhash, schooljaar, opleidingcode, Opleidingsnaam, instellingserkenningscode, school) %>%
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        earliest_date = min(begindatum),  # Bewaar de eerste aanmelddatum
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
 
-# Group by month
+# Converteer datums naar het juiste formaat voor temporele analyse
+applications_temporal <- applications_grouped_with_date %>%
+  mutate(
+    month = floor_date(earliest_date, "month"),
+    year = year(earliest_date),
+    month_number = month(earliest_date)
+  )
+
 monthly_applications <- applications_temporal %>%
-  mutate(month = floor_date(begindatum, "month")) %>%
-  group_by(month) %>%
-  summarise(
-    applications = n(),
-    conversions = sum(status == "ENROLLED", na.rm = TRUE),
-    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
-    .groups = "drop"
+    mutate(
+        academic_year = if_else(month_number >= 10, schooljaar, schooljaar - 1),
+        academic_month = if_else(month_number >= 10, 
+                                 month_number - 9,    # Oct (10) becomes 1
+                                 month_number + 3)    # Jan (1) becomes 4
+    ) %>%
+    group_by(schooljaar, academic_year, academic_month) %>%
+    summarise(
+        applications = n(),
+        conversions = sum(is_enrolled),
+        conversion_rate = mean(is_enrolled) * 100,
+        .groups = "drop"
+    )
+# Create month labels for academic year
+academic_month_labels <- c("Oct", "Nov", "Dec", "Jan", "Feb", "Mar", 
+                           "Apr", "May", "Jun", "Jul", "Aug", "Sep")
+
+
+```
+
+We vergelijken eerst de aanmeldingen per maand tussen 2023 en 2024. Dit laat zien of er veranderingen zijn in het aanmeldingspatroon van jaar tot jaar, wat belangrijk is voor trendanalyse.
+
+```{r}
+#| label: monthly-comparison-plot
+
+# Visualisatie: vergelijking van maandelijkse patronen per schooljaar
+ggplot(monthly_applications, 
+       aes(x = academic_month, y = applications, 
+           color = factor(schooljaar), group = factor(schooljaar))) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 1:12, labels = academic_month_labels) +
+  theme_minimal() +
+  labs(title = "Maandelijkse Aanmeldingen per Schooljaar",
+       subtitle = "Oktober t/m September",
+       x = "Maand",
+       y = "Aantal Aanmeldingen",
+       color = "Schooljaar") +
+  scale_y_continuous(labels = comma) +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+Niet alleen het volume is belangrijk, maar ook de conversiepercentages per maand. Dit kan onthullen wanneer de meest "serieuze" studenten zich aanmelden.
+
+```{r}
+#| label: conversion-comparison-plot
+
+# Visualisatie: vergelijking van conversiepercentages per schooljaar
+ggplot(monthly_applications, 
+       aes(x = academic_month, y = conversion_rate, 
+           color = factor(schooljaar), group = factor(schooljaar))) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2.5) +
+  scale_x_continuous(breaks = 1:12, labels = academic_month_labels) +
+  theme_minimal() +
+  labs(title = "Maandelijkse Conversiepercentages per Jaar",
+       subtitle = "Vergelijking tussen 2023 en 2024",
+       x = "Maand",
+       y = "Conversiepercentage (%)",
+       color = "Schooljaar") +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, NA)) +
+  scale_color_brewer(palette = "Set1")
+
+```
+
+Tot slot analyseren we de verdeling van aanmeldingsstatussen per maand en jaar. Dit geeft inzicht in het verloop van het administratieve proces gedurende het jaar.
+
+
+```{r}
+#| label: status-by-month
+
+# First, prepare the base data with needed identifiers and date calculation
+status_by_week_base <- applications_enriched %>%
+  #filter(opleidingcode == 25699) %>%
+  # Filter only for school year 2024
+  filter(schooljaar == 2024) %>%
+  # Process date and week information
+  mutate(
+    begindatum = as.Date(begindatum),
+    # Week calculation
+    week_of_year = week(begindatum),
+    year_of_date = year(begindatum),
+    
+    # Calculate academic week number
+    academic_week = case_when(
+      month(begindatum) >= 10 ~ week_of_year - week(as.Date(paste0(year_of_date, "-10-01"))) + 1,
+      TRUE ~ week_of_year + (52 - week(as.Date(paste0(year_of_date-1, "-10-01")))) + 1
+    ),
+    
+    academic_month = if_else(month(begindatum) >= 10, 
+                             month(begindatum) - 9,
+                             month(begindatum) + 3),
+    
+    # Categorize status
+    status_category = case_when(
+      status == "SUBMITTED" ~ "Submitted",
+      status == "RECEIVED" ~ "Received",
+      status == "OFFERED" ~ "Offered", 
+      status == "ENROLLED" ~ "Enrolled",
+      status == "REJECTED" ~ "Rejected",
+      status == "WITHDRAWN" ~ "Withdrawn",
+      TRUE ~ "Other"
+    )
+  )
+
+# Get the unique application identifiers
+application_identifiers <- status_by_week_base %>%
+  select(bsnhash, schooljaar, opleidingcode, instellingserkenningscode) %>%
+  distinct()
+
+# Count new status entries by week
+new_status_by_week <- status_by_week_base %>%
+  # Group by application and week
+  group_by(
+    bsnhash, schooljaar, opleidingcode, instellingserkenningscode,
+    academic_week, academic_month, status_category
   ) %>%
-  arrange(month)
+  # Just count the occurrences (taking the most recent status per application per week)
+  summarise(
+    count = n_distinct(bsnhash, opleidingcode, instellingserkenningscode),
+    .groups = "drop"
+  )
+
+# Count status transitions by week
+status_transitions <- status_by_week_base %>%
+  # Sort by date within each application group
+  arrange(bsnhash, schooljaar, opleidingcode, instellingserkenningscode, begindatum) %>%
+  # Group by application
+  group_by(bsnhash, schooljaar, opleidingcode, instellingserkenningscode) %>%
+  # Calculate status transitions
+  mutate(
+    prev_status = lag(status_category),
+    prev_week = lag(academic_week)
+  ) %>%
+  # Filter to only status transitions
+  filter(!is.na(prev_status) & status_category != prev_status) %>%
+  # Group by week and status transition type
+  group_by(academic_week, academic_month, prev_status, status_category) %>%
+  # Count transitions
+  summarise(
+    transition_count = n(),
+    .groups = "drop"
+  )
+
+# Calculate running counts of status for each week
+status_running_counts <- new_status_by_week %>%
+  # Get full range of academic weeks
+  full_join(
+    tibble(academic_week = min(new_status_by_week$academic_week):max(new_status_by_week$academic_week)),
+    by = "academic_week"
+  ) %>%
+  # Make sure all status categories are represented in all weeks
+  complete(academic_week, status_category, fill = list(count = 0)) %>%
+  # Add month information
+  group_by(academic_week) %>%
+  mutate(
+    academic_month = first(academic_month[!is.na(academic_month)])
+  ) %>%
+  ungroup()
+
+# Calculate the running status counts
+# Starting with zero counts for all statuses
+all_weeks <- sort(unique(status_running_counts$academic_week))
+all_statuses <- unique(status_running_counts$status_category)
+
+# Initialize results dataframe
+result <- data.frame()
+
+# Build running counts matrix
+status_counts <- matrix(0, nrow = length(all_weeks), ncol = length(all_statuses))
+colnames(status_counts) <- all_statuses
+rownames(status_counts) <- all_weeks
+
+# For each week, adjust counts based on status transitions
+for (i in 1:length(all_weeks)) {
+  week <- all_weeks[i]
+  
+  # If we're past the first week, start with previous week's counts
+  if (i > 1) {
+    status_counts[i,] <- status_counts[i-1,]
+  }
+  
+  # Add new entries from this week
+  week_new <- new_status_by_week %>% 
+    filter(academic_week == week)
+  
+  for (j in 1:nrow(week_new)) {
+    status <- week_new$status_category[j]
+    status_counts[i, status] <- status_counts[i, status] + week_new$count[j]
+  }
+  
+  # Apply transitions from previous statuses
+  week_transitions <- status_transitions %>% 
+    filter(academic_week == week)
+  
+  for (j in 1:nrow(week_transitions)) {
+    from_status <- week_transitions$prev_status[j]
+    to_status <- week_transitions$status_category[j]
+    trans_count <- week_transitions$transition_count[j]
+    
+    # Decrease count for previous status
+    status_counts[i, from_status] <- status_counts[i, from_status] - trans_count
+    # Increase count for new status (already done by adding new entries)
+  }
+  
+  # Add results to output dataframe
+  for (status in all_statuses) {
+    result <- rbind(result, data.frame(
+      academic_week = week,
+      status_category = status,
+      count = status_counts[i, status]
+    ))
+  }
+}
+
+# Add month information
+result <- result %>%
+  left_join(
+    status_by_week_base %>% 
+      select(academic_week, academic_month) %>% 
+      distinct(),
+    by = "academic_week"
+  )
+
+# Calculate total per week for percentages
+week_totals <- result %>%
+  group_by(academic_week) %>%
+  summarise(total = sum(count), .groups = "drop")
+
+# Add percentages
+result <- result %>%
+  left_join(week_totals, by = "academic_week") %>%
+  mutate(percentage = count / total * 100)
+
+# Define color palette with different intensities
+status_colors <- c(
+  "Submitted" = "#a9cce3",     # Very light blue
+  "Received" = "#2980b9",        # Light blue
+  "Offered" = "#1a5276",       # Medium blue
+  "Enrolled" = "darkgreen",      # Dark blue
+  "Rejected" = "#e74c3c",      # Red (contrast)
+  "Withdrawn" = "#f39c12",     # Orange (contrast)
+  "Other" = "#95a5a6"          # Gray
+)
+
+# Determine which weeks correspond to the start of each month for the x-axis
+month_start_weeks <- result %>%
+  filter(!is.na(academic_month)) %>%
+  group_by(academic_month) %>%
+  summarise(start_week = min(academic_week), .groups = "drop")
+
+# Create vector of labels for the x-axis
+academic_month_labels <- c("Okt", "Nov", "Dec", "Jan", "Feb", "Mrt", 
+                         "Apr", "Mei", "Jun", "Jul", "Aug", "Sep")
+
 ```
 
 ```{r}
-#| label: monthly-volume-plot
+#| label: status-by-month-plot
 
-# Visualize monthly pattern
-ggplot(monthly_applications, aes(x = month)) +
-  geom_line(aes(y = applications), color = "blue", size = 1) +
-  geom_point(aes(y = applications), color = "blue", size = 2) +
+# Visualization of status per week as area chart
+ggplot(result, 
+       aes(x = academic_week, y = count, 
+           fill = status_category, group = status_category)) +
+  geom_area(position = "stack", alpha = 0.8) +
+  scale_fill_manual(values = status_colors) +
   theme_minimal() +
-  labs(title = "Monthly Application Volumes",
-       x = "Month",
-       y = "Number of Applications") +
-  scale_y_continuous(labels = comma)
+  labs(title = "Aanmeldingsstatus per Week voor Schooljaar 2024",
+       subtitle = "Gestapelde visualisatie van statusverdeling",
+       x = "Week (academisch jaar)",
+       y = "Aantal Aanmeldingen",
+       fill = "Status") +
+  scale_x_continuous(
+    breaks = month_start_weeks$start_week,
+    labels = academic_month_labels[month_start_weeks$academic_month],
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(labels = comma, expand = c(0, 0),
+                     limits = c(0, 300000)) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
 ```
 
-```{r}
-#| label: monthly-conversion-plot
+### Inzichten Temporele Analyse
+De temporele analyse biedt essentiële inzichten voor planning en optimalisatie:
 
-# Visualize conversion rate over time
-ggplot(monthly_applications, aes(x = month, y = conversion_rate)) +
-  geom_line(color = "green4", size = 1) +
-  geom_point(color = "green4", size = 2) +
-  theme_minimal() +
-  labs(title = "Monthly Conversion Rates",
-       x = "Month",
-       y = "Conversion Rate (%)") +
-  scale_y_continuous(labels = function(x) paste0(x, "%"))
-```
+Er zijn duidelijke seizoenspatronen in aanmeldingen, met pieken in bepaalde maanden die consistent zijn tussen jaren
+Het conversiepercentage varieert significant gedurende het jaar, waarbij vroege aanmeldingen vaak een hogere conversiekans hebben
+De statusverdeling laat zien dat er een natuurlijke progressie is van statuswijzigingen gedurende het jaar
+2023 en 2024 vertonen vergelijkbare patronen, maar met enkele opvallende verschillen die nader onderzoek verdienen
 
-## Next Steps
+Deze inzichten zijn cruciaal voor:
 
-This analysis forms the foundation for our Shiny app implementation. Key findings to highlight in the interactive dashboard:
+1. Het optimaliseren van marketingcampagnes op basis van seizoenspatronen
+2. Het verbeteren van het administratieve proces voor tijdige statusveranderingen
+3. Het beter plannen van capaciteit gedurende piekmomenten
+4. Het identificeren van trends die aanvullende aandacht vereisen
 
-1. Overall trends in application volume and conversion rates across years
-2. The impact of multiple applications on conversion likelihood
-3. Geographic patterns in application origin
-4. Institution crossing patterns
-5. Temporal patterns in application timing
+## Vervolg
+Deze analyse vormt de basis voor een dashboard implementatie. Belangrijke bevindingen die we willen benadrukken in het interactieve dashboard:
 
-The next steps are to:
-1. Refine these analyses based on stakeholder feedback
-2. Convert the static visualizations to interactive components
-3. Implement the filtering functionality
-4. Structure the app into logical modules following the Golem framework
+1. Er zijn duidelijk patronen in verloop aanmeldingenn
+2. Het aantal andere aanmeldingen speelt grote rol bij conversie
+3. Per instellingen en opleiding zijn er duidelijke verschillen
+
+Inhoudelijk zouden we ook graag kijken naar:
+
+1. Geografische patronen in de herkomst van aanmeldingen
+2. Patronen in overlap tussen instellingen en opleidingen
+
+De volgende stappen zijn:
+
+1. Deze analyses verfijnen op basis van feedback van stakeholders
+2. De statische visualisaties omzetten naar interactieve componenten
+3. De filterfunctionaliteit implementeren
+4. Back-end van een app bouwen
+
