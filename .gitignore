@@ -64,3 +64,8 @@ rsconnect/
 *_cache
 *.html
 *html*
+
+# shiny
+inst/*/rsconnect/
+inst/*/dev/
+inst/*/data-raw/
