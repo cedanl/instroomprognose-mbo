@@ -1,10 +1,23 @@
 ---
-title: "Student Inflow Analysis - MVP Prototype"
+title: "Instroomanalyse CAMBO - MVP"
+subtitle: "Eerste inzichten in aanmeldingsgegevens"
+author: "Corneel den Hartogh"
+affiliation: "CEDA - Npuls"
+date: "`r format(Sys.time(), '%d %B %Y')`"
 format: 
   html:
     toc: true
+    toc-title: Inhoudsopgave
     code-fold: true
     code-summary: "Laat code zien"
+  pdf:
+    toc: true
+    toc-title: Inhoudsopgave
+    #number-sections: true
+    #colorlinks: true
+    echo: false
+    #code-fold: true
+    #code-summary: "Laat code zien"
 execute:
   cache: true
   freeze: auto
@@ -245,7 +258,7 @@ applications_conversion %>%
   scale_y_continuous(limits = c(0, 75)) +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  labs(title = "Conversiepercentage per Type Meervoudige Aanmelding",
+  labs(title = "Conversiepercentage per Type Aanmelding",
        subtitle = "Vergelijking tussen 2023 en 2024",
        x = NULL,
        y = "Conversiepercentage (%)",
@@ -275,7 +288,7 @@ applications_count_distribution <- applications_grouped_multiple %>%
 # Toon alleen de eerste 10 waarden voor overzichtelijkheid
 ggplot(applications_count_distribution %>% filter(schooljaar %in% c(2023, 2024)), 
        aes(x = students_pct, 
-           fill = factor(schooljaar, levels = c("2024", "2023")),
+           fill = factor(schooljaar, levels = c("2023", "2024")),
            y = reorder(factor(applications_total_number), -as.numeric(applications_total_number))))  +
   geom_col(position = "dodge") +
   geom_text(aes(label = paste0(round(students_pct, 1), "%")), 
@@ -329,7 +342,7 @@ conversion_by_count <- conversion_by_count %>%
 ggplot(conversion_by_count %>% filter(schooljaar %in% c(2023, 2024)), 
        aes(y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)), 
            x = application_conversion_rate, 
-           fill = factor(schooljaar, levels = c("2024", "2023")))) +  # Reverse year order
+           fill = factor(schooljaar, levels = c("2023", "2024")))) +  # Reverse year order
   geom_col(position = "dodge") +
   geom_text(aes(label = paste0(round(application_conversion_rate, 1), "%")), 
             position = position_dodge(width = 0.9),
@@ -403,13 +416,13 @@ top_bottom_programs %>%
     title = "Top 5 en Laagste 5 Opleidingen op Conversiepercentage",
     subtitle = "Gebaseerd op gegroepeerde aanmeldingsgegevens van opleidingen met > 50 inschrijvingen"
   ) %>%
+    cols_hide(columns = categorie) %>%  # Verberg de categoriekolom
   cols_label(
     opleidingcode = "Code",
     Opleidingsnaam = "Opleidingsnaam",
     applications = "Aanmeldingen",
     conversions = "Inschrijvingen",
-    conversion_rate = "Conversie (%)",
-    categorie = "Categorie"
+    conversion_rate = "Conversie (%)"
   ) %>%
   fmt_number(
     columns = c(applications, conversions),
@@ -461,7 +474,10 @@ top_institutions <- applications_grouped %>%
     .groups = "drop"
   ) %>%
   arrange(desc(conversion_rate)) %>%
-    filter(applications > 100)
+    filter(applications > 100) %>%
+    mutate(school = ifelse(school == "STC (Scheepvaart en Transport College)", 
+                           "STC", 
+                           school))
 
 # Haal top 5 en bottom 5 op basis van volume
 top5_institutions <- head(top_institutions, 5)
@@ -485,13 +501,12 @@ top_bottom_institutions %>%
     title = "Top 5 en laagste 5 Instellingen op conversiepercentage",
     subtitle = "Gebaseerd op gegroepeerde aanmeldingsgegevens"
   ) %>%
+    cols_hide(columns = c(instellingserkenningscode, categorie)) %>%  # Verberg de categoriekolom
   cols_label(
-    instellingserkenningscode = "BRIN",
     school = "Instelling",
     applications = "Aanmeldingen",
     conversions = "Inschrijvingen",
-    conversion_rate = "Conversie (%)",
-    categorie = "Categorie"
+    conversion_rate = "Conversie (%)"
   ) %>%
   fmt_number(
     columns = c(applications, conversions),
@@ -558,42 +573,43 @@ ordered_programs <- bind_rows(top5_programs, bottom5_programs) %>%
     idx = row_number()
   )
 
-# Visualiseer conversiepercentages van top en laagste opleidingen (horizontaal)
-plot_ly() %>%
-  # Voeg laagste 5 toe met tekstlabels aan buitenkant
-  add_trace(
-    data = bottom5_programs,
-    y = ~reorder(Opleidingsnaam, -as.numeric(factor(Opleidingsnaam, levels = ordered_programs$Opleidingsnaam))),
-    x = ~conversion_rate, 
-    type = "bar",
-    name = "Laagste 5",
-    marker = list(color = "#FF9800"),
-    text = ~paste0(round(conversion_rate, 1), "%"),
-    textposition = "outside",
-    outsidetextfont = list(color = "black"),
-    hoverinfo = "text+y"
-  ) %>%
-  # Voeg top 5 toe met tekstlabels aan binnenkant
-  add_trace(
-    data = top5_programs,
-    y = ~reorder(Opleidingsnaam, -as.numeric(factor(Opleidingsnaam, levels = ordered_programs$Opleidingsnaam))),
-    x = ~conversion_rate, 
-    type = "bar",
-    name = "Top 5",
-    marker = list(color = "#1976D2"),
-    text = ~paste0(round(conversion_rate, 1), "%"),
-    textposition = "inside",
-    insidetextfont = list(color = "white"),
-    hoverinfo = "text+y"
-  )  %>%
-  layout(
-    title = "Conversiepercentages Top 5 en Laagste 5 Opleidingen",
-    yaxis = list(title = ""),
-    xaxis = list(title = "Conversiepercentage (%)"),
-    margin = list(l = 150, r = 50),  # Extra marge rechts voor outside labels
-    showlegend = TRUE,
-    barmode = "group"
+programs_plot_data <- rbind(
+  cbind(top5_programs, group = "Top 5"),
+  cbind(bottom5_programs, group = "Laagste 5")
+)
+
+# Zorg ervoor dat de volgorde van de opleidingen correct is
+programs_plot_data$Opleidingsnaam <- factor(
+  programs_plot_data$Opleidingsnaam, 
+  levels = rev(ordered_programs$Opleidingsnaam)  # rev() om dezelfde volgorde als plotly te krijgen
+)
+
+# Maak de ggplot
+ggplot(programs_plot_data, aes(x = conversion_rate, y = Opleidingsnaam, fill = group)) +
+  geom_col(position = position_dodge(width = 0.9)) +
+  geom_text(
+    aes(
+      label = paste0(round(conversion_rate, 1), "%"),
+      hjust = ifelse(group == "Top 5", 1.2, -0.2)
+    ),
+    position = position_dodge(width = 0.9),
+    color = ifelse(programs_plot_data$group == "Top 5", "white", "black"),
+    size = 3.5
+  ) +
+  scale_fill_manual(values = c("Top 5" = "#1976D2", "Laagste 5" = "#FF9800")) +
+  labs(
+    title = "Conversie Top 5 en Laagste 5",
+    x = "Conversiepercentage (%)",
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "top",
+    plot.margin = margin(5, 50, 5, 5),  # Extra marge rechts voor labels
+    axis.text.y = element_text(size = 10)
   )
+
 ```
 
 ```{r}
@@ -625,42 +641,45 @@ ordered_institutions <- bind_rows(top5_institutions, bottom5_institutions) %>%
     idx = row_number()
   )
 
-# Visualiseer conversiepercentages van top en laagste instellingen (horizontaal)
-plot_ly() %>%
-  # Voeg laagste 5 toe met tekstlabels aan buitenkant
-  add_trace(
-    data = bottom5_institutions,
-    y = ~reorder(school, -as.numeric(factor(school, levels = ordered_institutions$school))),
-    x = ~conversion_rate, 
-    type = "bar",
-    name = "Laagste 5",
-    marker = list(color = "#FF9800"),
-    text = ~paste0(round(conversion_rate, 1), "%"),
-    textposition = "outside",
-    outsidetextfont = list(color = "black"),
-    hoverinfo = "text+y"
-  ) %>%
-  # Voeg top 5 toe met tekstlabels aan binnenkant
-  add_trace(
-    data = top5_institutions,
-    y = ~reorder(school, -as.numeric(factor(school, levels = ordered_institutions$school))),
-    x = ~conversion_rate, 
-    type = "bar",
-    name = "Top 5",
-    marker = list(color = "#1976D2"),
-    text = ~paste0(round(conversion_rate, 1), "%"),
-    textposition = "inside",
-    insidetextfont = list(color = "white"),
-    hoverinfo = "text+y"
-  ) %>%
-  layout(
-    title = "Conversiepercentages Top 5 en Laagste 5 Instellingen",
-    yaxis = list(title = ""),
-    xaxis = list(title = "Conversiepercentage (%)"),
-    margin = list(l = 150, r = 50),  # Extra marge rechts voor outside labels
-    showlegend = TRUE,
-    barmode = "group"
+# Visualisatie 1: Conversiepercentages van top en laagste instellingen
+# Combineer de datasets voor eenvoudiger plotten
+institutions_plot_data <- rbind(
+  cbind(top5_institutions, group = "Top 5"),
+  cbind(bottom5_institutions, group = "Laagste 5")
+)
+
+# Zorg ervoor dat de volgorde van de instellingen correct is
+institutions_plot_data$school <- factor(
+  institutions_plot_data$school, 
+  levels = rev(ordered_institutions$school)  # rev() om dezelfde volgorde als plotly te krijgen
+)
+
+# Maak de ggplot
+ggplot(institutions_plot_data, aes(x = conversion_rate, y = school, fill = group)) +
+  geom_col(position = position_dodge(width = 0.9)) +
+  geom_text(
+    aes(
+      label = paste0(round(conversion_rate, 1), "%"),
+      hjust = ifelse(group == "Top 5", 1.2, -0.2)
+    ),
+    position = position_dodge(width = 0.9),
+    color = ifelse(institutions_plot_data$group == "Top 5", "white", "black"),
+    size = 3.5
+  ) +
+  scale_fill_manual(values = c("Top 5" = "#1976D2", "Laagste 5" = "#FF9800")) +
+  labs(
+    title = "Conversie Top 5 en Laagste 5",
+    x = "Conversiepercentage (%)",
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(
+    legend.title = element_blank(),
+    legend.position = "top",
+    plot.margin = margin(5, 50, 5, 5),  # Extra marge rechts voor labels
+    axis.text.y = element_text(size = 10)
   )
+
 ```
 
 ### Inzichten Opleidingen en Instellingen
