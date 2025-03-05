@@ -1,0 +1,60 @@
+---
+title: "Synthetische data generatie"
+format: html
+---
+
+## Data inladen
+
+```{r}
+applications <- safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+                      delim = ",",
+                      col_types = cols(.default = col_guess()))
+```
+
+## Data filteren
+
+You can add options to executable code like this 
+
+```{r}
+#| echo: false
+
+applications_filtered <- applications %>% 
+    filter(schooljaar %in% c(2023, 2024)) %>%
+    group_by(bsnhash) %>%
+    # Add a group number (either approach works)
+    mutate(group_num = cur_group_id()) |> 
+    # Ungroup if you need to
+    ungroup() |>
+    # Filter for group numbers ending in 0
+    filter(group_num %% 100 == 0)
+
+```
+
+## Data randomiseren
+
+```{r}
+# First combination: location variables
+location_vars <- c("postcodecijfers", "onderwijsaanbiedercode", 
+                   "instellingserkenningscode", "onderwijslocatiecode")
+
+# Shuffle the location variables while preserving structure
+applications_filtered_location_shuffled <- shuffle_group_combinations(applications_filtered, "bsnhash", location_vars)
+
+# Second combination: program variables
+program_vars <- c("opleidingcode", "leertrajectmbo", "leeftijdscategorie")
+
+# Shuffle the program variables while preserving structure
+applications_filtered_all_shuffled <- shuffle_group_combinations(df_location_shuffled, "bsnhash", program_vars)
+
+# The final dataframe (df_final) now has both sets of variables shuffled
+# while preserving the structure for each bsnhash
+
+```
+
+```{r}
+
+# save synthetic data as csv with , as delimiter to data/synthetic with aanmeldingen_oktober_2024_synthetic.csv as filename
+write_csv(applications_filtered_all_shuffled, "data/synthetic/aanmeldingen_oktober_2024_synthetic.csv")
+
+```
+

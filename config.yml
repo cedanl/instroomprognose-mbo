@@ -1,7 +1,8 @@
 
 default:
   data_base_dir: "data/synthetic"
-  brin_code: "24ZZ"
+  applications_filename: "applications_oktober_2024_synthetic.csv"
 
 cambo:
   data_base_dir: "data/cambo"
+  applications_filename: "applications_oktober_2024.csv"

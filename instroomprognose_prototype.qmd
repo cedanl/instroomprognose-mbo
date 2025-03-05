@@ -46,7 +46,10 @@ We laten de data in.
 #| freeze: true
 #| cache: false
 
-applications <- safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+applications_filepath <- file.path(config::get("data_base_dir"),
+                                   config::get("applications_filename"))
+
+applications <- safe_read_csv(applications_filepath, 
                       delim = ",",
                       col_types = cols(.default = col_guess()))
 
