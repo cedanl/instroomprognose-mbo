@@ -62,6 +62,7 @@ rsconnect/
 /*_files/
 /*_cache/
 *_cache
+*.pdf
 *.html
 *html*
 

@@ -4,10 +4,12 @@
 ^.*_files$
 ^.*\.qmd$
 ^.*\.html$
+^.*\.pdf$
 ^_quarto.yml
+^.devcontainer
 
 # Project specific
-^.*analysis\.Rproj$
+^.*\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^data/
