@@ -53,6 +53,7 @@ rsconnect/
 /data/*
 !/data/synthetic/
 !/data/reference/
+!/data/metadata/
 
 # quarto
 /_book/
