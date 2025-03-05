@@ -1,0 +1,117 @@
+{
+  "name": "R Development Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // R
+        "reditorsupport.r",
+        "REditorSupport.r-lsp",
+        "posit.air-vscode",
+        "posit.shiny",
+
+        // Quarto
+        "quarto.preview",
+        "quarto.quarto",
+
+        // Web Development
+        "ritwickdey.LiveServer",
+
+        // Python
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+
+        // Data stuff
+        "mechatroner.rainbow-csv",
+        "GrapeCity.gc-excelviewer",
+        "alexcvzz.vscode-sqlite",
+        "RandomFractalsInc.vscode-data-preview",
+        "wayou.vscode-todo-highlight",
+        "oderwat.indent-rainbow",
+
+        // Path completion
+        "christian-kohler.path-intellisense",
+
+        // AI
+        "github.copilot",
+
+        // Additional recommended extensions
+        "vscode-icons-team.vscode-icons",
+        "usernamehw.errorlens",
+        "yzhang.markdown-all-in-one",
+        "mhutchie.git-graph",
+        "ms.vscode-docker",
+        "tomoki1207.pdf"
+      ],
+      "settings": {
+        // R settings
+        "r.alwaysUseActiveTerminal": true,
+        "r.bracketedPaste": true,
+        "r.sessionWatcher": true,
+        "r.rterm.linux": "/opt/venv/bin/radian",
+        "r.rpath.linux": "/usr/local/bin/R",
+        "r.lsp.diagnostics": true,
+        "r.linting.enable": false,
+        "workbench.colorTheme": "Default Dark+",
+        "r.plot.useHttpgd": true,
+
+        // Editor settings
+        "editor.formatOnSave": true,
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": true,
+        "editor.wordWrap": "on",
+        "editor.minimap.renderCharacters": false,
+        "editor.minimap.maxColumn": 100,
+
+        // File handling
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "explorer.confirmDelete": false,
+
+        // Quarto settings
+        "quarto.mathjax.scale": 1.2,
+
+        // Git settings
+        "git.enableSmartCommit": true,
+        "git.autofetch": true,
+
+        // Terminal
+        "terminal.integrated.defaultProfile.linux": "bash",
+
+        // CSV handling
+        "rainbow_csv.comment_prefix": "#",
+
+        // LiveServer
+        "liveServer.settings.donotShowInfoMsg": true,
+
+        // Theme
+        "workbench.iconTheme": "vscode-icons",
+
+        // Font settings for Fira Code
+        "editor.fontFamily": "'Fira Code', Consolas, 'Courier New', monospace",
+        "editor.fontLigatures": true,
+        "terminal.integrated.fontFamily": "'Fira Code'"
+      }
+    },
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    }
+  },
+
+  // Run renv::restore() with proper library path
+  // "postCreateCommand": "mkdir -p /home/vscode/R/library && R -e 'Sys.setenv(R_LIBS_USER=\"/home/vscode/R/library\"); renv::restore(confirm = FALSE, library=\"/home/vscode/R/library\"); install.packages(\"httpgd\", lib=\"/home/vscode/R/library\", repos=\"https://cran.rstudio.com/\")'",
+
+  // Display message when container is ready
+  "postStartCommand": "echo '🚀 R Development Environment is ready!'",
+
+  // Explicitly set environment variables at runtime
+  "containerEnv": {
+    "R_LIBS_USER": "/home/vscode/R/library",
+    "R_LIBS_SITE": "/usr/local/lib/R/site-library"
+  }
+}
