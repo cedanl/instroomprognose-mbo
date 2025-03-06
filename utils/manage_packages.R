@@ -118,7 +118,7 @@ options(renv.snapshot.filter = function(project) {
 # renv::snapshot(type = "custom")
 
 # TODO Run with clean = TRUE to remove all packages that are added but not in snapshot
-renv::restore()
+renv::restore(confirm = FALSE)
 
 
 # Load packages
