@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y \
     libbz2-dev \
     libsodium-dev \
     libmagick++-dev \
+    libgdal-dev \
+    libproj-dev \
+    libgeos-dev \
+    libudunits2-dev \
     python3-full \
     python3-pip \
     wget \
