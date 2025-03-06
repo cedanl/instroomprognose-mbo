@@ -24,8 +24,10 @@ source("utils/renv/activate.R")
 options(.pal_dir = "utils/pal_prompts")
 
 # gpt-4o
-options(.gander_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
-options(.pal_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
+if (requireNamespace("ellmer", quietly = TRUE)) {
+    options(.gander_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
+    options(.pal_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
+}
 
 # Gander settings
 #options(.gander_style = "Use tidyverse style and,when relevant, tidyverse packages. For example, when asked to plot something, use ggplot2, or when asked to transform data, using dplyr and/or tidyr unless explicitly instructed otherwise. Ensure your code is self-documenting so use appropriately named helper variables. Return a r-quarto block when only given text and only code when give code.")
