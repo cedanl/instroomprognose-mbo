@@ -44,10 +44,8 @@ packages_cran <- c(
     # visualisation
     "ggplot2" ,       # Create plots
     "scales",
-    "DT",
     "gt",
     "leaflet",
-    "plotly",
     "sf",
 
     # main
