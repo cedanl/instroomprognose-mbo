@@ -5,6 +5,9 @@ Sys.setenv(
     RENV_PATHS_RENV = file.path("utils/renv"),
     RENV_PATHS_LOCKFILE = file.path("utils/proj_settings/renv.lock"),
 
+    ## Renv settings
+    RENV_INSTALL_STAGED = "FALSE",
+
     # Performance
     # RENV_CONFIG_PAK_ENABLED = TRUE, # Pak gives error with solving dependencies, so disabled
     RENV_CONFIG_INSTALL_JOBS = 4, # Pak does parallelization by default, so not needed
@@ -15,7 +18,13 @@ Sys.setenv(
     # Ensure renv uses local library instead of cache (needed because renv::init() isn't run)
     RENV_PATHS_LIBRARY = file.path("utils/renv/library")
 )
+
+# More renv options
+options(pkg.install.staged.warn = FALSE)
+options(pkgType = "binary")
+
 source("utils/renv/activate.R")
+
 
 # Pal settings
 # TODO: The default of pal is Anthropic, for setting model see:
@@ -23,10 +32,18 @@ source("utils/renv/activate.R")
 # Keep prompts in this directory to ensure completeness and ease of modification
 options(.pal_dir = "utils/pal_prompts")
 
-# gpt-4o
+
+# TODO Set azure deployment, endpoints and api-key
+azure_deployment_id = "o3-mini"
+# azure_deployment_id = "gpt-4o"
+Sys.setenv(AZURE_OPENAI_ENDPOINT = "https://ceda-chatgpt-sweden.openai.azure.com",
+           AZURE_OPENAI_API_KEY = "4Lo8luWk28g9VbFWPfGjh7MPnrPQDN0koECtztukN9Sc5jOa0NdgJQQJ99BBACfhMk5XJ3w3AAABACOG0Qk7"
+)
+
+
 if (requireNamespace("ellmer", quietly = TRUE)) {
-    options(.gander_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
-    options(.pal_chat = ellmer::chat_azure(deployment_id = "01-mini-sweden"))
+    options(.gander_chat = ellmer::chat_azure(deployment_id = azure_deployment_id))
+    options(.pal_chat = ellmer::chat_azure(deployment_id = azure_deployment_id))
 }
 
 # Gander settings
