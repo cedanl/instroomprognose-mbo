@@ -7,7 +7,40 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        // R
+        // Your existing extensions...
+      ],
+      "settings": {
+        // Your existing settings...
+
+        // Add this setting to enable interactive sessions to load .Rprofile
+        "r.alwaysUseActiveTerminal": true,
+        "r.bracketedPaste": true,
+        "r.sessionWatcher": true
+      }
+    }
+  },
+
+  // Add this to set up renv permissions after container creation
+  "postCreateCommand": "mkdir -p utils/renv/library && chmod -R 777 utils/renv",
+
+  // The below command can be used to display a message when the container is ready
+  "postStartCommand": "echo '🚀 R Development Environment is ready! Starting R terminal...' && radian",
+
+  // Make sure environment variables are properly set
+  "containerEnv": {
+    "R_LIBS_USER": "/home/vscode/R/library",
+    "R_LIBS_SITE": "/usr/local/lib/R/site-library"
+  }
+}{
+  "name": "R Development Environment",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // R settings
         "reditorsupport.r",
         "REditorSupport.r-lsp",
         "posit.air-vscode",
@@ -103,13 +136,13 @@
     }
   },
 
-  // Run renv::restore() with proper library path
-  // "postCreateCommand": "mkdir -p /home/vscode/R/library && R -e 'Sys.setenv(R_LIBS_USER=\"/home/vscode/R/library\"); renv::restore(confirm = FALSE, library=\"/home/vscode/R/library\"); install.packages(\"httpgd\", lib=\"/home/vscode/R/library\", repos=\"https://cran.rstudio.com/\")'",
+  // Add this to set up renv permissions after container creation
+  "postCreateCommand": "mkdir -p utils/renv/library && chmod -R 777 utils/renv",
 
-  // Display message when container is ready
-  "postStartCommand": "echo '🚀 R Development Environment is ready!'",
+  // The below command can be used to display a message when the container is ready
+  "postStartCommand": "echo '🚀 R Development Environment is ready! Starting R terminal...' && radian",
 
-  // Explicitly set environment variables at runtime
+  // Make sure environment variables are properly set
   "containerEnv": {
     "R_LIBS_USER": "/home/vscode/R/library",
     "R_LIBS_SITE": "/usr/local/lib/R/site-library"

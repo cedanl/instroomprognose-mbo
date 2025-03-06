@@ -33,10 +33,11 @@ RUN wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.6.39/quar
 # Set working directory
 WORKDIR /workspaces
 
-# Install renv
+# Install essential R packages
 RUN R -e "install.packages('languageserver', repos = 'https://cloud.r-project.org/')"
 RUN R -e "install.packages('httpgd', repos = c('https://cranhaven.r-universe.dev', 'https://cloud.r-project.org'))"
 
+# Set up radian (improved R console)
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir radian jupyter
@@ -44,7 +45,10 @@ RUN pip install --no-cache-dir radian jupyter
 # Create the R library directories with appropriate permissions
 RUN mkdir -p /home/vscode/R/library && \
     chmod -R 777 /home/vscode/R && \
-    chmod -R 777 /usr/local/lib/R/site-library
+    chmod -R 777 /usr/local/lib/R/site-library && \
+    # Ensure renv directories have proper permissions
+    mkdir -p /workspaces/utils/renv/library && \
+    chmod -R 777 /workspaces/utils/renv
 
 # Set R library path environment variables
 ENV R_LIBS_USER=/home/vscode/R/library
