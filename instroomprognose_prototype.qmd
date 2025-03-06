@@ -1,5 +1,5 @@
 ---
-title: "Instroomanalyse CAMBO - MVP"
+title: "Instroomanalyse `r config::get('name')` - MVP"
 subtitle: "Eerste inzichten in aanmeldingsgegevens"
 author: "Corneel den Hartogh"
 affiliation: "CEDA - Npuls"
@@ -16,8 +16,6 @@ format:
     #number-sections: true
     #colorlinks: true
     echo: false
-    #code-fold: true
-    #code-summary: "Laat code zien"
 execute:
   cache: true
   freeze: auto
@@ -394,7 +392,7 @@ top_programs <- applications_grouped %>%
     .groups = "drop"
   ) %>%
   arrange(desc(conversion_rate)) %>%
-    filter(conversions > 50)
+    filter(conversions > 10)
 
 # Haal top 5 en Laagste 5 op basis van volume
 top5_programs <- head(top_programs, 5)
