@@ -7,39 +7,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        // Your existing extensions...
-      ],
-      "settings": {
-        // Your existing settings...
-
-        // Add this setting to enable interactive sessions to load .Rprofile
-        "r.alwaysUseActiveTerminal": true,
-        "r.bracketedPaste": true,
-        "r.sessionWatcher": true
-      }
-    }
-  },
-
-  // Add this to set up renv permissions after container creation
-  "postCreateCommand": "mkdir -p utils/renv/library && chmod -R 777 utils/renv",
-
-  // The below command can be used to display a message when the container is ready
-  "postStartCommand": "echo '🚀 R Development Environment is ready! Starting R terminal...' && radian",
-
-  // Make sure environment variables are properly set
-  "containerEnv": {
-    "R_LIBS_USER": "/home/vscode/R/library",
-    "R_LIBS_SITE": "/usr/local/lib/R/site-library"
-  }
-}{
-  "name": "R Development Environment",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": ".."
-  },
-  "customizations": {
-    "vscode": {
-      "extensions": [
         // R settings
         "reditorsupport.r",
         "REditorSupport.r-lsp",
@@ -142,7 +109,8 @@
   // The below command can be used to display a message when the container is ready
   "postStartCommand": "echo '🚀 R Development Environment is ready! Starting R terminal...' && radian",
 
-  // Make sure environment variables are properly set
+
+  // Explicitly set environment variables at runtime
   "containerEnv": {
     "R_LIBS_USER": "/home/vscode/R/library",
     "R_LIBS_SITE": "/usr/local/lib/R/site-library"
