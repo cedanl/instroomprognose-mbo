@@ -45,8 +45,8 @@ packages_cran <- c(
     "ggplot2" ,       # Create plots
     "scales",
     "gt",
-    "leaflet",
-    "sf",
+    #"leaflet",
+    #"sf",
 
     # main
     "cli",            # Create command line interfaces
@@ -67,10 +67,10 @@ packages_cran <- c(
     "tibble",         # Edit and create tibbles
     "tidyr",          # Tidy data in the tidyverse environment
     #"fst",            # Perform operations with large data files
-    "dplyr",          # Utilise the dplyr environment
+    "dplyr"#,          # Utilise the dplyr environment
     #"vvmover",
     #"vvconverter",
-    "corrr"           # Correlation matrix
+    #"corrr"           # Correlation matrix
 )
 
 # Include both the package name (for loading) and the account name (for renv snapshot)
