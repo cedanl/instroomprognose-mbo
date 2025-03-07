@@ -11,7 +11,6 @@
         "reditorsupport.r",
         "REditorSupport.r-lsp",
         "posit.air-vscode",
-        "posit.shiny",
 
         // Quarto
         "quarto.preview",
@@ -19,16 +18,17 @@
 
         // Web Development
         "ritwickdey.LiveServer",
+        // "posit.shiny",
 
         // Python
-        "ms-python.python",
-        "ms-toolsai.jupyter",
+        //"ms-python.python",
+        //#"ms-toolsai.jupyter",
 
         // Data stuff
         "mechatroner.rainbow-csv",
         "GrapeCity.gc-excelviewer",
-        "alexcvzz.vscode-sqlite",
-        "RandomFractalsInc.vscode-data-preview",
+        //"alexcvzz.vscode-sqlite",
+        //"RandomFractalsInc.vscode-data-preview",
         "wayou.vscode-todo-highlight",
         "oderwat.indent-rainbow",
 
@@ -36,14 +36,14 @@
         "christian-kohler.path-intellisense",
 
         // AI
-        "github.copilot",
+        //"github.copilot",
 
         // Additional recommended extensions
         "vscode-icons-team.vscode-icons",
         "usernamehw.errorlens",
         "yzhang.markdown-all-in-one",
-        "mhutchie.git-graph",
-        "ms.vscode-docker",
+        //"mhutchie.git-graph",
+        //"ms.vscode-docker",
         "tomoki1207.pdf"
       ],
       "settings": {
@@ -54,9 +54,18 @@
         "r.rterm.linux": "/opt/venv/bin/radian",
         "r.rpath.linux": "/usr/local/bin/R",
         "r.lsp.diagnostics": true,
+        "r.lsp.enabled": true,
+        "r.lsp.path": "/usr/local/lib/R/site-library/languageserver",
+        // TODO This currently false, later on enable
         "r.linting.enable": false,
         "workbench.colorTheme": "Default Dark+",
         "r.plot.useHttpgd": true,
+        "r.plot.defaults.url": "http://localhost",
+        "r.plot.defaults.port": 8888,
+        "r.libPaths": [
+          "/usr/local/lib/R/site-library",
+          "/home/vscode/R/library"
+        ],
 
         // Editor settings
         "editor.formatOnSave": true,
@@ -75,8 +84,8 @@
         "quarto.mathjax.scale": 1.2,
 
         // Git settings
-        "git.enableSmartCommit": true,
-        "git.autofetch": true,
+        // "git.enableSmartCommit": true,
+        // "git.autofetch": true,
 
         // Terminal
         "terminal.integrated.defaultProfile.linux": "bash",
@@ -106,8 +115,8 @@
   // Add this to set up renv permissions after container creation
   "postCreateCommand": "mkdir -p utils/renv/library && chmod -R 777 utils/renv",
 
-  // The below command can be used to display a message when the container is ready
-  "postStartCommand": "echo '🚀 R Development Environment is ready! Starting R terminal...' && radian",
+  // Display a message instructing users to open an R terminal manually
+  "postStartCommand": "echo '🚀 R Development Environment is ready! To start working, click the dropdown arrow next to the + button in the Terminal panel and select \"R\" terminal.'",
 
 
   // Explicitly set environment variables at runtime

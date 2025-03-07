@@ -37,9 +37,18 @@ RUN wget https://github.com/quarto-dev/quarto-cli/releases/download/v1.6.39/quar
 # Set working directory
 WORKDIR /workspaces
 
-# Install essential R packages
-RUN R -e "install.packages('languageserver', repos = 'https://cloud.r-project.org/')"
-RUN R -e "install.packages('httpgd', repos = c('https://cranhaven.r-universe.dev', 'https://cloud.r-project.org'))"
+# Install essential R packages (global installation for all users)
+RUN R -e "install.packages('languageserver', repos = 'https://cloud.r-project.org/', lib = '/usr/local/lib/R/site-library')"
+RUN R -e "install.packages('httpgd', repos = c('https://cranhaven.r-universe.dev', 'https://cloud.r-project.org'), lib = '/usr/local/lib/R/site-library')"
+
+# Create .Rprofile to load packages on startup
+RUN echo 'if(interactive()) { \
+    .First <- function() { \
+      message("Loading language server and httpgd...") \
+      suppressPackageStartupMessages(library(languageserver)) \
+      suppressPackageStartupMessages(library(httpgd)) \
+    } \
+}' >> /etc/R/Rprofile.site
 
 # Set up radian (improved R console)
 RUN python3 -m venv /opt/venv
