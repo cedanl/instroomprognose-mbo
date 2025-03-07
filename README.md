@@ -1,47 +1,93 @@
-# P3 Template
-Welcome to this a template repository! In the top right corner you can 'Use this template'
+<p align="center"><img src="src/assets/p3_logo.png" alt="Instroomanalyse MBO"></p> <h1 align="center">Instroomanalyse CAMBO</h1> <div align="center"> <strong>🚀  🛠️</strong> <br> Een aanpasbare analyse en demo repository ondersteund door LLMs. <br> <sub>Gebaseerd op het R P3 Template, ideaal voor data-analisten, onderzoekers en developers op zoek naar gestandaardiseerde structuur</sub> 
 
-P3 stands for:
-- Project
-- Process
-- Presentation
+</div>
 
 
-## Project
-A project as in a complete collection of code for a specific purpose. In both R and Python a collection of code is called a project. In Python characterised with a pyproject.toml file and in R with a .Rproj file. The goal of this template is to go one step further. Not only some generic project settings are included, but more best practices regarding package selection, package management and folder strucure are taken into account. In addition, this is done within the project, but in the background. This enables beginners to use these tools without complete understanding, while more expert users can adapt everything.
+## 📋 Table of Contents
 
-Concrete elements are:
-- Folder structure following standard package structure, thereby enabling automatated checks and documentation
-- Default folders for synthetic data and metadata
-- Config.yaml for adapting the defaults 
-- A set-up script that runs everything needed
-- Renv for external package management, without the need to initialize or update renv manually
-- Filled and commented .Rprofile, .Rbuildignore and .gitignore
-- A Quarto how-to that illustrates the content of the project (see Process below)
-
-## Process
-The current structure is opinionated. It works particularly well when combined with a certain process. Within the research community and (early) data science there was a preference for tools like R Markdown (in R) and Jupyter Notebooks (in Python). Both tools enable the combination of natural language (text) and programming language (code). This enables so-called 'literate programming'. As defined by Knuth. 
-
-Quarto is a new tool that facilitates both R and Python code blocks (among others). In addition, it enables diverse forms of presentation, like pdf, powerpoint, sites and even books (see Presentation below).
-
-A user can simple load the quarto (qmd) file and
-1. run a code block
-2. inspect it's output
-3. either modify the code (and run again) or run the next code block
-
-Within the code blocks there is not 'raw' R code, but there are functions run that can be found in the R folder. Experienced users can also adapt these functions. Run load_all() and run the code block again. Putthing functions with detailed R code within the R-folder enables the qmd file to become very clean. 
+- [Motivation](#-motivation)
+- [What P3 Stans For](#-what-p3-stands-for)
+- [Quick Start](#-quick-start)
+- [Features](#-features)
+- [Project Structure](#-project-structure)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Additional Resources](#-additional-resources)
 
 
+## 💡 Motivation
 
-Focuses on workflow
-Pipeline becomes a tool rather than a concept
-Emphasizes "how" you work
+The P3 Template addresses common challenges in R project start-up, organization and reproducibility. It provides a standardized structure that:
+- Enables secure and high-performance LLM-usage from the IDE.
+- Improves project maintainability
+- Streamlines the transition from explorative analysis to final presentation
+
+### What P3 Stands For:
+
+- Project: A complete, well-organized codebase with good practices incorporated
+- Process: A way-of-work and guide to help you being more productive
+- Presentation: Professional, adaptable and beautiful outputs
+
+## 🚀 Quick Start
+
+1. Ensure you have R (>= 4.0.0) and RStudio installed.
+
+2. Click "Code" in the top right corner
+3. Clone this repository with git or git clients like Github Desktop or Smartgit, or download as zip.
+4. Open the project in RStudio and run the setup script by clicking Enter:
+```
+Setup script detected. Run 00_setup.R? (press ENTER to run, ESC to skip): 
+```
+5. Depending on your local R packages, this may take a few minutes.
+6. Run the exploratory analysis by opening instroomprognose_prototype.qmd and click Render
+7. Investigate the report in html or pdf
+
+### Troubleshooting:
+- If you encounter package installation issues, try updating R and RStudio to their latest versions.
+- For renv-related problems, refer to the [renv documentation](https://rstudio.github.io/renv/articles/renv.html).
+
+## 📁 Project Structure
+
+🚧 The P3 Template follows a well-organized directory structure to enhance productivity and maintainability. Here's an overview of the key directories: 
+
+```
+project-root/
+├── data/
+│   └── synthetic/                   # Synthetic data for testing and examples
+│   └── reference/       
+│   └── metadata/      
+├── man/                             # Auto-generated documentation
+├── R/                               # R functions and scripts
+└── utils/               
+    ├── pal_prompts/     
+├── instroomprognose_prototype.qmd   # The analysis file that demonstrates built-in functionality
+├── 00_set_up.R                      # Ensuring all basic steps are done and project is ready-for-analysis
+├── config.yml                       # Configuration settings, like which data folder to use (by default synthetic)
+
+```
+
+## 🤝 Contributing
+
+- Thanks to [Npuls](https://npuls.nl/) for providing the opportunity to develop this package
+- Thank you to CEDA-colleagues for stimulating conversations and feedback Bram, Tomer, Amir, Tony, Theo, Ash, Steven, Caspar, Shirley and Martine
+- Thanks to SURF Developer Program for sparking interest in templates
 
 
-## Presentation
-The visuals that are produced with the quarto file are also saved for later usage.
+Contribute as well! Please see our Contributing Guide for details. 
 
-More specific than "Product"
-Directly references outputs (reports/viz)
-Quarto fits naturally here
-Clear deliverable focus
+Key ways to contribute:
+
+- Report bugs or suggest features by opening an issue
+- Submit pull requests for bug fixes or new features
+- Improve documentation or add usage examples
+
+
+## 📄 License
+
+This project is licensed under the [Apache License](LICENSE.md).
+
+## 📚 Additional Resources
+
+- See P3 Template
+- Stuff regarding CAMBO
+
