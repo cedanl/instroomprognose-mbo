@@ -42,13 +42,14 @@ RUN R -e "install.packages('languageserver', repos = 'https://cloud.r-project.or
 RUN R -e "install.packages('httpgd', repos = c('https://cranhaven.r-universe.dev', 'https://cloud.r-project.org'), lib = '/usr/local/lib/R/site-library')"
 
 # Create .Rprofile to load packages on startup
-RUN echo 'if(interactive()) { \
+RUN mkdir -p /etc/R && \
+    echo 'if(interactive()) { \
     .First <- function() { \
       message("Loading language server and httpgd...") \
       suppressPackageStartupMessages(library(languageserver)) \
       suppressPackageStartupMessages(library(httpgd)) \
     } \
-}' >> /etc/R/Rprofile.site
+}' > /etc/R/Rprofile.site
 
 # Set up radian (improved R console)
 RUN python3 -m venv /opt/venv
