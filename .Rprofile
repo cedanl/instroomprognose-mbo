@@ -12,7 +12,7 @@ Sys.setenv(
     # RENV_CONFIG_PAK_ENABLED = TRUE, # Pak gives error with solving dependencies, so disabled
     RENV_CONFIG_INSTALL_JOBS = 4, # Pak does parallelization by default, so not needed
 
-    # Specfic settings, renv is within setup scrpts checked and synchronized if needed
+    # Specfic settings, renv is within setup scripts checked and synchronized if needed
     RENV_CONFIG_SYNCHRONIZED_CHECK = FALSE,
 
     # Ensure renv uses local library instead of cache (needed because renv::init() isn't run)
