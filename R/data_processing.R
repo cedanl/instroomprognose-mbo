@@ -1,4 +1,61 @@
 
+
+#' Safe CSV Reader with Flexible Arguments
+#'
+#' @description
+#' Safely reads a delimited file with error handling, path validation, and
+#' configurable reading parameters. Uses sane defaults for European CSV format.
+#'
+#' @param filename Required filename
+#' @param ... Additional arguments passed to readr::read_delim
+#' @param path Optional path to prepend to filename
+#'
+#' @return A tibble containing the CSV data
+#' @importFrom readr read_delim cols col_guess locale
+#'
+#' @export
+safe_read_csv <- function(filename, ..., path = NULL) {
+
+    # Construct full file path
+    filename <- if (is.null(path)) {
+        filename
+    } else {
+        file.path(path, filename)
+    }
+
+    filename <- normalizePath(filename, mustWork = FALSE)
+
+    # Check if file exists
+    if (!file.exists(filename)) {
+        stop(sprintf("File not found: %s", filename))
+    }
+
+    # Default arguments for European CSV format
+    default_args <- list(
+        file = filename,
+        delim = ";",
+        name_repair = "unique",
+        escape_double = FALSE,
+        locale = locale(decimal_mark = ",", grouping_mark = "."),
+        trim_ws = TRUE,
+        col_types = cols(.default = col_guess()),
+        na = c("", "NA", "NULL")
+    )
+
+    # Override defaults with any provided arguments
+    function_args <- utils::modifyList(default_args, list(...))
+
+    # Attempt to read file
+    tryCatch({
+        df <- do.call(read_delim, function_args)
+        if (nrow(df) == 0) warning(sprintf("File is empty: %s", filename))
+        df
+    }, error = function(e) {
+        stop(sprintf("Error reading file %s: %s", filename, e$message))
+    })
+}
+
+
 #' Shuffle Group Combinations While Preserving Structure
 #'
 #' @description
