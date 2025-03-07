@@ -989,33 +989,31 @@ academic_month_labels <- c("Okt", "Nov", "Dec", "Jan", "Feb", "Mrt",
 
 ```
 
+
 ```{r}
 #| label: status-by-month-plot
-
-# Visualization of status per week as area chart
 ggplot(result, 
        aes(x = academic_week, y = count, 
            fill = status_category, group = status_category)) +
-  geom_area(position = "stack", alpha = 0.8) +
-  scale_fill_manual(values = status_colors) +
-  theme_minimal() +
-  labs(title = "Aanmeldingsstatus per Week voor Schooljaar 2024",
-       subtitle = "Gestapelde visualisatie van statusverdeling",
-       x = "Week (academisch jaar)",
-       y = "Aantal Aanmeldingen",
-       fill = "Status") +
-  scale_x_continuous(
-    breaks = month_start_weeks$start_week,
-    labels = academic_month_labels[month_start_weeks$academic_month],
-    expand = c(0, 0)
-  ) +
-  scale_y_continuous(labels = comma, expand = c(0, 0),
-                     limits = c(0, 300000)) +
-  theme(
-    panel.grid.minor = element_blank(),
-    legend.position = "bottom"
-  )
-
+    geom_area(position = "stack", alpha = 0.8) +
+    scale_fill_manual(values = status_colors) +
+    theme_minimal() +
+    labs(title = "Aantal Aanmeldingen per Status per Week",
+         subtitle = "Schooljaar 2024",
+         x = "Week (academisch jaar)",
+         y = "Aantal Aanmeldingen",
+         fill = "Status") +
+    scale_x_continuous(
+        breaks = month_start_weeks$start_week,
+        labels = academic_month_labels[month_start_weeks$academic_month],
+        expand = c(0, 0)
+    ) +
+    scale_y_continuous(labels = comma,
+                       expand = c(0, 0)) +
+    theme(
+        panel.grid.minor = element_blank(),
+        legend.position = "bottom"
+    )
 ```
 
 ### Inzichten Temporele Analyse
