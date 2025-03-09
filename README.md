@@ -60,7 +60,7 @@ project-root/
 ├── R/                               # R functions and scripts
 └── utils/               
     ├── pal_prompts/     
-├── instroomprognose_prototype.qmd   # The analysis file that demonstrates built-in functionality
+├── instroomprognose_prototype.qmd   # The analysis file that demonstrates functionality
 ├── 00_set_up.R                      # Load packages and user settings
 ├── config.yml                       # Configuration settings, like references to data
 ├── CLAUDE.md                        # Instructions that help LLMs to support you
