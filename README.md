@@ -61,9 +61,9 @@ project-root/
 └── utils/               
     ├── pal_prompts/     
 ├── instroomprognose_prototype.qmd   # The analysis file that demonstrates built-in functionality
-├── 00_set_up.R                      # Ensuring all basic steps are done and project is ready-for-analysis
-├── config.yml                       # Configuration settings, like which data folder to use (by default synthetic)
-├── CLAUDE.md                        # Instructions that help LLMs to support you appropriately, can be configured
+├── 00_set_up.R                      # Load packages and user settings
+├── config.yml                       # Configuration settings, like references to data
+├── CLAUDE.md                        # Instructions that help LLMs to support you
 
 ```
 
