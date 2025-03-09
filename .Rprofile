@@ -34,19 +34,19 @@ options(.pal_dir = "utils/pal_prompts")
 
 
 # TODO Set azure deployment, endpoints and api-key
-azure_deployment_id = "o3-mini"
 # azure_deployment_id = "gpt-4o"
 Sys.setenv(AZURE_OPENAI_ENDPOINT = "https://ceda-chatgpt-sweden.openai.azure.com",
-           AZURE_OPENAI_API_KEY = "4Lo8luWk28g9VbFWPfGjh7MPnrPQDN0koECtztukN9Sc5jOa0NdgJQQJ99BBACfhMk5XJ3w3AAABACOG0Qk7"
+           AZURE_OPENAI_API_KEY = "4Lo8luWk28g9VbFWPfGjh7MPnrPQDN0koECtztukN9Sc5jOa0NdgJQQJ99BBACfhMk5XJ3w3AAABACOG0Qk7",
+           AZURE_OPENAI_DEPLOYMENT_ID = "03-mini"
 )
 
-
 if (requireNamespace("ellmer", quietly = TRUE)) {
-    options(.gander_chat = ellmer::chat_azure(deployment_id = azure_deployment_id))
-    options(.pal_chat = ellmer::chat_azure(deployment_id = azure_deployment_id))
+    options(.gander_chat = ellmer::chat_azure(deployment_id = Sys.getenv("AZURE_OPENAI_DEPLOYMENT_ID")))
+    options(.pal_chat = ellmer::chat_azure(deployment_id = Sys.getenv("AZURE_OPENAI_DEPLOYMENT_ID")))
 }
 
 # Gander settings
+options(.gander_dims = c(0, 250))
 #options(.gander_style = "Use tidyverse style and,when relevant, tidyverse packages. For example, when asked to plot something, use ggplot2, or when asked to transform data, using dplyr and/or tidyr unless explicitly instructed otherwise. Ensure your code is self-documenting so use appropriately named helper variables. Return a r-quarto block when only given text and only code when give code.")
 
 # Trigger load
