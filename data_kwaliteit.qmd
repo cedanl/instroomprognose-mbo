@@ -1,0 +1,146 @@
+---
+title: "Data kwaliteit"
+format: html
+---
+
+```{r}
+#| label: setup
+#| cache: false
+#| output: false
+#| include: false
+#| freeze: false
+
+# Load required libraries
+source("00_setup.R")
+
+```
+
+## 1. Data inladen & toevoegen
+
+We laden het basis-bestand en de referentiedata (BRIN en opleidingen) in. 
+
+```{r}
+#| label: load-data
+#| freeze: true
+#| cache: false
+
+applications_filepath <- file.path(config::get("data_base_dir"),
+                                   config::get("applications_filename"))
+
+applications <- safe_read_csv(applications_filepath, 
+                      delim = ",",
+                      col_types = cols(postcodecijfers = "c",
+                                       .default = col_guess()))
+
+# Load reference data
+brin <- read_excel("data/reference/BRIN.xlsx")
+programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
+
+```
+
+```{r}
+#| label: enrich-data
+# Join with reference data
+applications_enriched <- applications %>%
+    # Convert opleidingcode to integer for joining (drops a small % of non-numeric values)
+    mutate(opleidingcode = as.integer(opleidingcode)) %>%
+    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) %>%
+    left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
+
+```
+
+## Data kwaliteit
+
+### Postcode kwaliteit
+
+We analyseren hoeveel aanmeldingen niet voldoen aan het Nederlandse postcode formaat (4 cijfers), verdeeld over de schooljaren.
+
+```{r}
+#| label: postcode-analyse
+#| warning: false
+
+# Definieer een functie om te controleren of postcodecijfers geldig is
+# Geldige postcodecijfers bestaan uit precies 4 numerieke karakters
+is_valid_postcode_digits <- function(postcodecijfers) {
+    # Vectorized functie die NA's en niet-valide postcodes afhandelt
+    ifelse(is.na(postcodecijfers), FALSE, grepl("^\\d{4}$", postcodecijfers))
+}
+
+# Check de postcodecijfers validiteit
+applications_enriched <- applications_enriched %>%
+    mutate(
+        valid_postcode = is_valid_postcode_digits(postcodecijfers),
+        schooljaar = factor(schooljaar) # Zorg dat schooljaar als factor wordt behandeld
+    )
+
+# Tellingen per schooljaar
+postcode_validation_by_year <- applications_enriched %>%
+    group_by(schooljaar) %>%
+    summarise(
+        totaal_aanmeldingen = n(),
+        geldige_postcodes = sum(valid_postcode, na.rm = TRUE),
+        ongeldige_postcodes = sum(!valid_postcode, na.rm = TRUE),
+        percentage_ongeldig = round(ongeldige_postcodes / totaal_aanmeldingen * 100, 2)
+    ) %>%
+    arrange(schooljaar)
+
+# Toon resultaten
+knitr::kable(postcode_validation_by_year, 
+             caption = "Ongeldige postcodes per schooljaar",
+             col.names = c("Schooljaar", "Totaal aanmeldingen", "Geldige postcodes", 
+                          "Ongeldige postcodes", "% Ongeldig"))
+
+# Visualisatie
+ggplot(postcode_validation_by_year, aes(x = schooljaar, y = ongeldige_postcodes)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    geom_text(aes(label = percentage_ongeldig), vjust = -0.5) +
+    labs(
+        title = "Aantal ongeldige postcodes per schooljaar",
+        subtitle = "Ongeldige postcodes bevatten niet precies 4 cijfers",
+        x = "Schooljaar",
+        y = "Aantal ongeldige postcodes"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Detailanalyse ongeldige postcodes
+
+Laten we ook kijken naar de meest voorkomende ongeldige postcodecijfers-patronen:
+
+```{r}
+#| label: postcode-patroon-analyse
+
+# Top 10 ongeldige postcodes
+top_invalid_postcodes <- applications_enriched %>%
+    filter(!valid_postcode) %>%
+    count(postcodecijfers, sort = TRUE) %>%
+    head(10)
+
+knitr::kable(top_invalid_postcodes, 
+             caption = "Top 10 meest voorkomende ongeldige postcodes",
+             col.names = c("Postcodecijfers", "Aantal"))
+
+# Categorisatie van ongeldige postcodes
+applications_enriched <- applications_enriched %>%
+    mutate(
+        postcode_categorie = case_when(
+            valid_postcode ~ "Geldig (4 cijfers)",
+            is.na(postcodecijfers) ~ "Ontbrekend",
+            grepl("^\\d{1,3}$", postcodecijfers) ~ "Te weinig cijfers",
+            grepl("^\\d{5,}$", postcodecijfers) ~ "Te veel cijfers",
+            grepl("[^0-9]", postcodecijfers) ~ "Bevat niet-numerieke karakters",
+            TRUE ~ "Overig ongeldig"
+        )
+    )
+
+# Verdeling van postcode-categorieën
+postcode_categories <- applications_enriched %>%
+    count(postcode_categorie) %>%
+    mutate(percentage = round(n / sum(n) * 100, 2)) %>%
+    arrange(desc(n))
+
+knitr::kable(postcode_categories,
+             caption = "Categorisatie van postcodes",
+             col.names = c("Categorie", "Aantal", "Percentage (%)"))
+```
