@@ -16,6 +16,7 @@
 - Prefer the happy path principle with guard clauses above nested if's
 - Try to avoid nested for loops as well
 - Use tidyverse styleguide when in doubt
+- Never use library calls, check if package is loaded in `utils/manage_packages.R`
 
 ## Naming Conventions
 - Function names should be verbs (get_*, save_*, load_*)
