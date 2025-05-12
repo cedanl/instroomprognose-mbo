@@ -48,11 +48,16 @@ packages_cran <- c(
     #"leaflet",
     #"sf",
 
+    # process mining
+    "eventdataR",     # Event data
+    "bupaR",          # Business process analysis
+    "processmapR",    # Process mining
     # main
     "cli",            # Create command line interfaces
     #"LaF",            # Read data files without encoding (like ASCII)
     #"dataReporter",   # Create a data audit report
     # "rlang",          # Enable complex operations
+    "forcats",        # Work with factors
     "config",         # Set up configuration files and functions
     "janitor",        # Clean up names from special characters
     "lubridate",      # Work with dates and times

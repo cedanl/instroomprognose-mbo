@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.4.1",
+    "Version": "4.4.3",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -197,6 +197,35 @@
       ],
       "Hash": "b299c6741ca9746fb227debcb0f9fb6c"
     },
+    "bupaR": {
+      "Package": "bupaR",
+      "Version": "0.5.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "cli",
+        "data.table",
+        "dplyr",
+        "eventdataR",
+        "forcats",
+        "ggplot2",
+        "glue",
+        "lifecycle",
+        "lubridate",
+        "magrittr",
+        "miniUI",
+        "pillar",
+        "purrr",
+        "rlang",
+        "shiny",
+        "stringi",
+        "stringr",
+        "tibble",
+        "tidyr"
+      ],
+      "Hash": "b67874defe3fb19b7145d9a41a662bf9"
+    },
     "cachem": {
       "Package": "cachem",
       "Version": "1.1.0",
@@ -341,6 +370,17 @@
         "R"
       ],
       "Hash": "8dd23d308c751efdf675124aad4bf5d7"
+    },
+    "data.table": {
+      "Package": "data.table",
+      "Version": "1.17.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "methods"
+      ],
+      "Hash": "d06cd1a942bb17b607df7d57048d6840"
     },
     "desc": {
       "Package": "desc",
@@ -503,6 +543,16 @@
       ],
       "Hash": "e9651417729bbe7472e32b5027370e79"
     },
+    "eventdataR": {
+      "Package": "eventdataR",
+      "Version": "0.3.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "04f9fde4736766c0ad524e4fe0b654c0"
+    },
     "fansi": {
       "Package": "fansi",
       "Version": "1.0.6",
@@ -540,6 +590,22 @@
         "rlang"
       ],
       "Hash": "bd1297f9b5b1fc1372d19e2c4cd82215"
+    },
+    "forcats": {
+      "Package": "forcats",
+      "Version": "1.0.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "cli",
+        "glue",
+        "lifecycle",
+        "magrittr",
+        "rlang",
+        "tibble"
+      ],
+      "Hash": "1a0a9a3d5083d0d573c4214576f1e690"
     },
     "fs": {
       "Package": "fs",
