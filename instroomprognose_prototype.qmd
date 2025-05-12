@@ -37,7 +37,7 @@ source("00_setup.R")
 
 ## 1. Data inladen & prepareren
 
-We laten de data in.
+We laden de data in.
 
 ```{r}
 #| label: load-data
@@ -55,12 +55,7 @@ applications <- safe_read_csv(applications_filepath,
 brin <- read_excel("data/reference/BRIN.xlsx")
 programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
 
-# Join with reference data
-applications_enriched <- applications %>%
-    # Convert opleidingcode to integer for joining (drops a small % of non-numeric values)
-    mutate(opleidingcode = as.integer(opleidingcode)) %>%
-    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) %>%
-    left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
+
 ```
 
 ## 2. Dashboard Aanmeldingsoverzicht
@@ -185,6 +180,25 @@ applications_grouped <- applications_recent %>%
 # Toon het verschil in aantal rijen
 cat(sprintf("Aantal rijen vóór groepering: %d\n", nrow(applications_recent)))
 cat(sprintf("Aantal rijen na groepering: %d\n", nrow(applications_grouped)))
+```
+
+
+We groeperen de aanmeldingen niet alleen per instelling-opleiding, maar ook enkel bij instelling. Dit doen we omdat er het vermoeden is dat sommige instellingen bij studenten die zich aanmelden voor meerdere opleidingen binnen CAMBO slechts 1 aanmelding leveren.
+
+```{r}
+
+applications_grouped_by_institution <- applications_recent %>%
+    mutate(begindatum = as.Date(begindatum)) %>%
+    group_by(bsnhash, schooljaar, instellingserkenningscode, school) %>%
+    summarise(
+        application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
+        statusses = paste(status, collapse = ", "),
+        is_enrolled = any(status == "ENROLLED"),
+        leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
+        statussource = paste(unique(statussource), collapse = ", "),
+        .groups = "drop"
+    )
+
 ```
 
 Het grote verschil in aantal rijen vóór en na groepering bevestigt hoe belangrijk deze stap is. We zien dat veel aanmeldingen meerdere statuswijzigingen ondergaan, wat kan wijzen op een complex administratief proces.
@@ -375,7 +389,7 @@ Deze inzichten kunnen gebruikt worden voor gerichte begeleiding van studenten me
 
 Laten we analyseren welke opleidingen en instellingen de hoogste en laagste aanmeldingsvolumes en conversiepercentages hebben. Dit helpt bij het identificeren van succesvolle programma's en potentiële verbeterpunten.
 
-Let op: Ik heb gefilterd bij opleidingen op minimaal 50 en bij instellingen op minimaal 100. Het ROC van Amsterdam had minder aanmeldingen. 
+Let op: Ik heb gefilterd bij opleidingen op minimaal 50 en bij instellingen op minimaal 100. Een aantal instellingen had een lager aantal.
 
 ```{r}
 #| label: program-analysis
@@ -392,7 +406,7 @@ top_programs <- applications_grouped %>%
     .groups = "drop"
   ) %>%
   arrange(desc(conversion_rate)) %>%
-    filter(conversions > 10)
+    filter(conversions > 20)
 
 # Haal top 5 en Laagste 5 op basis van volume
 top5_programs <- head(top_programs, 5)
@@ -613,6 +627,8 @@ ggplot(programs_plot_data, aes(x = conversion_rate, y = Opleidingsnaam, fill = g
 
 ```
 
+
+
 ```{r}
 #| label: institution-conversion-interactive
 
@@ -697,6 +713,83 @@ Deze analyse geeft waardevolle inzichten in de verschillen tussen opleidingen en
 
 Door zowel top als bottom opleidingen en instellingen te analyseren, krijgen we een completer beeld van het hele spectrum en kunnen we specifiekere strategieën ontwikkelen.
 
+### Kwaliteitscontrole aantal aanmeldingen
+
+Bij bovenstaande analyse valt op dat sommige instellingen een ongebruikelijk hoge conversie hebben. Dit leidde tot de vraag of instellingen niet aanmeldingen hergebruiken. Dat wil zeggen dat een student die zich bij een instelling voor meerdere opleidingen aanmeldt, in CAMBO toch maar één keer verschijnt voor deze instelling.
+
+Om dit te controleren kijken we naar het aantal aanmeldingen in CAMBO per instelling.
+
+```{r}
+#| label: application-quality-control
+ 
+applications_within_institution <- applications_grouped_by_institution |>
+    count(school)
+    
+applications_within_institution_programmes_combi <- applications_grouped |>
+    count(school)
+
+school_differences <- full_join(applications_within_institution, applications_within_institution_programmes_combi, by = "school") |>
+    filter(!is.na(school)) |>
+    mutate(
+        # Bereken aanmeldingen per student
+        aanmeldingen_per_student = n.y / n.x
+  ) |>
+    arrange(desc(aanmeldingen_per_student))
+
+
+```
+
+
+```{r}
+#| label: application-quality-control-plot
+#| fig.height: 10
+
+# Creëer een horizontale staafgrafiek met verbeterde weergave
+ggplot(school_differences |> 
+         mutate(school = fct_reorder(school, aanmeldingen_per_student)), 
+       aes(x = aanmeldingen_per_student , y = school, fill = aanmeldingen_per_student)) +
+  # Begin de x-as bij 0 (dit is 1.00 in werkelijkheid)
+  geom_col(width = 0.7) +
+  geom_text(aes(
+              label = sprintf("%.2f", aanmeldingen_per_student),
+              x = aanmeldingen_per_student),  # Gebruik de exacte positie van het einde van de balk
+            hjust = -0.2,  # Negatieve waarde plaatst de tekst rechts van het punt
+            size = 3) +
+  # Driekleuren verloop: lichtblauw (normaal) naar grijs naar oranje (verdacht)
+  scale_fill_gradientn(
+    colors = c("#4393C3", "#D9D9D9", "#E8A15D"),  # Lichtblauw, grijs, oranje
+    values = scales::rescale(c(1.3, 1.10, 1.0)),   # Posities van de kleuren aanpassen
+    #name = "Aanmeldingen\nper student"
+  ) +
+  # Fix x-as om bij 0 te beginnen maar labels vanaf 1.00 te tonen
+  scale_x_continuous(
+    #labels = function(x) x + 1,
+    breaks = seq(0, max(school_differences$aanmeldingen_per_student), by = 0.25),
+    expand = expansion(mult = c(0, 0.15))  # Extra ruimte links voor labels
+  ) +
+  # Labels
+  labs(
+    title = "Gemiddeld aantal aanmeldingen per student binnen instelling",
+    subtitle = "Waarden dicht bij 1.00 duiden op mogelijke datakwaliteitsproblemen",
+    x = NULL,
+    y = NULL
+  ) +
+  # Eenvoudige, schone layout
+theme_minimal() +
+  theme(
+    legend.position = "none",
+    legend.title = element_text(size = 8),
+    panel.grid = element_blank(),
+    axis.title.x = element_text(hjust = 1),
+    plot.title = element_text(face = "bold", hjust = 1), # Rechts uitlijnen (hjust = 1)
+    plot.subtitle = element_text(color = "darkgray", hjust = 1), # Ook rechts uitlijnen
+    axis.text.x = element_text(hjust = 0.5),
+    plot.margin = margin(t = 20, r = 20, b = 10, l = 10) # Extra marge bovenaan
+  )
+
+```
+
+We zien dat sommige instellingen nooit meer dan één aanmelding per student heeft (1.00). Dat is mogelijk bij vakscholen, maar bij bredere instellingen zeer onwaarschijnlijk.
 
 ## 5. Tijd Analyse
 
