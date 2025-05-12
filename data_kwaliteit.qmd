@@ -1,6 +1,26 @@
 ---
-title: "Data kwaliteit"
-format: html
+title: "Koppelpunt MBO - Data kwaliteit"
+subtitle: "Inzichten in data kwaliteit"
+author: "Corneel den Hartogh"
+affiliation: "CEDA - Npuls"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+format: 
+  html:
+    toc: true
+    toc-title: Inhoudsopgave
+    code-fold: true
+    code-summary: "Laat code zien"
+  pdf:
+    toc: true
+    toc-title: Inhoudsopgave
+    #number-sections: true
+    #colorlinks: true
+    echo: false
+execute:
+  cache: true
+  freeze: auto
+  include: true
+  warning: false
 ---
 
 ```{r}
@@ -38,8 +58,12 @@ programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
 
 ```
 
+We voegen de referentie data toe aan het bronbestand.
+
 ```{r}
 #| label: enrich-data
+#| cache: false
+#| freeze: false
 # Join with reference data
 applications_enriched <- applications %>%
     # Convert opleidingcode to integer for joining (drops a small % of non-numeric values)
@@ -49,15 +73,17 @@ applications_enriched <- applications %>%
 
 ```
 
-## Data kwaliteit
+## 2. Data kwaliteit
 
-### Postcode kwaliteit
+### 2.1 Postcode kwaliteit
 
 We analyseren hoeveel aanmeldingen niet voldoen aan het Nederlandse postcode formaat (4 cijfers), verdeeld over de schooljaren.
 
 ```{r}
 #| label: postcode-analyse
 #| warning: false
+#| freeze: false
+#| cache: false
 
 # Definieer een functie om te controleren of postcodecijfers geldig is
 # Geldige postcodecijfers bestaan uit precies 4 numerieke karakters
@@ -104,7 +130,7 @@ ggplot(postcode_validation_by_year, aes(x = schooljaar, y = ongeldige_postcodes)
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Detailanalyse ongeldige postcodes
+#### 2.1.1 Meest voorkomende ongeldige postcodes
 
 Laten we ook kijken naar de meest voorkomende ongeldige postcodecijfers-patronen:
 
@@ -115,32 +141,259 @@ Laten we ook kijken naar de meest voorkomende ongeldige postcodecijfers-patronen
 top_invalid_postcodes <- applications_enriched %>%
     filter(!valid_postcode) %>%
     count(postcodecijfers, sort = TRUE) %>%
-    head(10)
+    filter(n > 1)
 
 knitr::kable(top_invalid_postcodes, 
-             caption = "Top 10 meest voorkomende ongeldige postcodes",
+             caption = "Meest voorkomende ongeldige postcodes",
              col.names = c("Postcodecijfers", "Aantal"))
 
-# Categorisatie van ongeldige postcodes
-applications_enriched <- applications_enriched %>%
+```
+
+### 2.2 Schooljaar kwaliteit
+
+Uit de eerdere analyses blijkt dat de variabele 'schooljaar' niet altijd correct is ingevuld, met name voor de waarde '0'. We leiden daarom een nieuwe schooljaar-variabele af op basis van de 'created_date' en startmoment. 
+
+```{r}
+#| label: derive-school-year
+#| cache: false
+#| freeze: false
+
+# Zorg ervoor dat de datum kolommen daadwerkelijk als datum zijn geformatteerd
+applications_with_dates <- applications_enriched %>%
     mutate(
-        postcode_categorie = case_when(
-            valid_postcode ~ "Geldig (4 cijfers)",
-            is.na(postcodecijfers) ~ "Ontbrekend",
-            grepl("^\\d{1,3}$", postcodecijfers) ~ "Te weinig cijfers",
-            grepl("^\\d{5,}$", postcodecijfers) ~ "Te veel cijfers",
-            grepl("[^0-9]", postcodecijfers) ~ "Bevat niet-numerieke karakters",
-            TRUE ~ "Overig ongeldig"
-        )
+        created_date_parsed = as.Date(createdat),
+        begindatum_parsed = as.Date(begindatum)
     )
 
-# Verdeling van postcode-categorieën
-postcode_categories <- applications_enriched %>%
-    count(postcode_categorie) %>%
-    mutate(percentage = round(n / sum(n) * 100, 2)) %>%
-    arrange(desc(n))
+# Controleer of parsing succesvol was
+no_dates <- is.na(applications_with_dates$created_date_parsed) |> sum()
 
-knitr::kable(postcode_categories,
-             caption = "Categorisatie van postcodes",
-             col.names = c("Categorie", "Aantal", "Percentage (%)"))
+if (no_dates > 0) {
+    warning(paste("Er zijn", no_dates, "datums niet correct geparsed."))
+}
+
+# Voeg afgeleide schooljaar toe op basis van created_date en begindatum
+applications_with_derived <- applications_with_dates |>
+  mutate(
+    schooljaar_afgeleid_created = case_when(
+      is.na(created_date_parsed) ~ NA_integer_,
+      month(created_date_parsed) >= 10 ~ year(created_date_parsed) + 1,
+      month(created_date_parsed) < 10 ~ year(created_date_parsed),
+      .default = NA_integer_),
+    schooljaar_afgeleid_startmoment = case_when(
+      is.na(startmoment) ~ NA_integer_,
+      month(startmoment) >= 8 ~ year(startmoment),
+      month(startmoment) < 8 ~ year(startmoment) - 1,
+      .default = NA_integer_)
+    )
+    
+applications_with_conclusion <- applications_with_derived %>%
+  mutate(
+    schooljaar = as.integer(as.character(schooljaar)),
+    schooljaar_afgeleid = case_when(
+      # Alles hetzelfde
+      schooljaar == schooljaar_afgeleid_startmoment & 
+        schooljaar == schooljaar_afgeleid_created ~ schooljaar,
+      # Als schooljaar 0 is, dan is er geen startmoment
+      schooljaar == 0 ~ schooljaar_afgeleid_created,
+      # Soms is er een vroege aanmelding in augustus of september
+      schooljaar == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created == schooljaar - 1 &
+        month(created_date_parsed) %in% c(8,9) ~ schooljaar,
+      # Soms is er een late aanmelding op 1 oktober
+      schooljaar == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created == schooljaar + 1 &
+        month(created_date_parsed) == 10 &
+        day(created_date_parsed) == 1 ~ schooljaar,
+      # Soms is er een na-inschrijving
+      schooljaar == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created == schooljaar + 1 &
+        created_date_parsed < startmoment ~ schooljaar,
+      # Inschrijving op 10-1 jaar later waarbij created 2 jaar rekent
+      schooljaar == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created > schooljaar + 1 &
+        month(created_date_parsed) == 10 &
+        day(created_date_parsed) == 1 ~ schooljaar_afgeleid_created - 1,
+      # Bij overige gaan we uit van created
+      schooljaar_afgeleid_created > schooljaar ~ schooljaar_afgeleid_created,
+      .default = schooljaar
+    )
+  )
+
+test <- applications_with_conclusion |>
+  mutate(veranderd = schooljaar != schooljaar_afgeleid) |>
+  group_by(schooljaar_afgeleid) |>
+  summarise(n = n(),
+         veranderd = sum(veranderd, na.rm = TRUE),
+         percentage_veranderd = sum(veranderd, na.rm = TRUE) / n(),
+         .groups = "drop")
+
+test2 <- applications_with_conclusion |>
+  mutate(veranderd = schooljaar != schooljaar_afgeleid) |>
+  group_by(schooljaar) |>
+  summarise(n = n(),
+         veranderd = sum(veranderd, na.rm = TRUE),
+         percentage_veranderd = sum(veranderd, na.rm = TRUE) / n(),
+         .groups = "drop")
+
+# Vergelijk originele schooljaar met afgeleide schooljaren
+schooljaar_comparison <- applications_with_conclusion %>%
+  group_by(schooljaar, schooljaar_afgeleid) %>%
+  summarise(
+    aantal = n(), .groups = "drop"
+  ) %>%
+  #filter(!is.na(schooljaar_afgeleid_created)) %>%
+  arrange(schooljaar,
+          schooljaar_afgeleid)
+
+knitr::kable(schooljaar_comparison, 
+             caption = "Vergelijking tussen originele schooljaar en afgeleide schooljaar (op basis van created_date)",
+             col.names = c("Originele schooljaar", "Afgeleid schooljaar", "Aantal"))
+
+# Visualisatie van de vergelijking
+# Omgekeerde visualisatie met IBCS kleuren
+ggplot(schooljaar_comparison, aes(x = factor(schooljaar_afgeleid), y = aantal, fill = factor(schooljaar))) +
+    geom_bar(stat = "identity", position = "stack") +
+    scale_fill_manual(values = c(
+        "0" = "grey",     # Donkerblauw
+        "2021" = "#B4C7E7",  # Lichtblauw
+        "2022" = "#8FAADC",  # Middenblauw
+        "2023" = "#5B9BD5",  # Blauw
+        "2024" = "#4472C4"  # Donkerblauw
+    )) +
+    labs(
+        title = "Verdeling van afgeleid schooljaar versus originele schooljaar",
+        subtitle = "Op basis van created_date",
+        x = "Afgeleid schooljaar",
+        y = "Aantal aanmeldingen (per status)",
+        fill = "Originele schooljaar"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+We zien dat alle waardes 0 zijn omgezet naar naar daadwerkelijke jaren. Ook zien we dat voor andere jaren dan 2023 en 2024 het aantal aanwezige aanmeldingsstatussen veel lager is.
+
+## 3. Process mining
+
+Bij een administratief proces is de data-kwaliteit de proces-kwaliteit. Door met process mining een zogenoemde procesmap maken, krijgen we een indruk van de proceskwaliteit.
+
+### Preparatie
+
+```{r}
+#| label: process-mining-setup
+# Voorbereiden van de data voor process mining
+process_data <- applications_with_conclusion %>%
+ # Selecteer alleen relevante kolommen
+ select(
+   bsnhash,                    # Student identifier
+   ketenid,                    # Case identifier
+   status,                     # Activity name
+   begindatum,        # Date of activity begindatum is timestamp (dttm)
+   opleidingcode,              # Secondary case identifier
+   instellingserkenningscode,  # Secondary case identifier
+   onderwijslocatiecode,       # Secondary case identifier
+   schooljaar_afgeleid         # Secondary case identifier
+ ) %>%
+ # Hernoem kolommen naar standaard bupaR structuur
+ rename(
+   activity = status,
+   start = begindatum,
+ ) %>%
+ # Verwijder rijen met missende waarden in essentiële velden
+ filter(!is.na(activity), !is.na(start)) %>%
+ # Creëer een unieke case_id (student + opleiding + instelling)
+ mutate(
+   case_id = paste(ketenid, bsnhash, schooljaar_afgeleid, opleidingcode, instellingserkenningscode, onderwijslocatiecode, sep = "_")
+ )
+```
+
+Voor het maken van een proces map zoomen we in op één instelling: MBO Amersfoort (30RR).
+
+```{r}
+#| label: process-mining
+# Converteer naar bupaR eventlog formaat
+
+process_data_mboa <- process_data %>%
+  filter(instellingserkenningscode == "30RR") %>%
+  group_by(case_id) %>%
+  mutate(complete = lead(start),
+         activity_towards = lead(activity))
+
+log <- process_data_mboa %>%
+  convert_timestamps(c("start", "complete"), format = ymd_hms) |>
+  activitylog(
+   case_id = "case_id",
+   activity_id = "activity", 
+   timestamps = c("start", "complete"),
+   resource_id = "instellingserkenningscode",
+   order = "auto"
+ )
+
+```
+ 
+
+### Proces map
+
+Nu maken we 2 zogenoemde proces mappen. De eerste map heeft alle mogelijke status veranderingen, de tweede map selecteert alleen veranderingen als ze meer dan 5% van de gevallen voorkomen.
+
+```{r}
+#| label: process-mining-visualisation
+process_map_full <- process_map(
+  log, #type = frequency(value = "absolute", color_edges = "steelblue"), 
+  layout = layout_pm(edge_weight = TRUE, edge_cutoff = 1), 
+  rankdir = "TB", 
+  type_nodes = frequency("relative_case"), 
+  type_edges = frequency("relative_case"), 
+  render = FALSE
+)
+
+
+if (knitr::is_html_output() | interactive()) {
+  #DiagrammeR::render_graph(process_map_full)
+  processmapR::render_map(process_map_full)
+} else {
+  # For PDF output, export and include
+  map_file <- "data_kwaliteit_files/figure-pdf/process-mining-full.pdf"
+  processmapR::export_map(process_map_full, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+
+```
+
+We zien naast de standaard flow (submitted -> received -> offered -> enrolled) ook veel andere flows. Dit zijn vaak flows die niet meer dan 5% van de gevallen bevatten.
+
+Voor iets meer overzicht, kijken we daarom naar de flows die meer dan 5% van de gevallen bevatten. Dit betekent dat we alleen statusveranderingen opnemen die bij 5% of meer van de aanmeldingen voorkomen. Een aanmelding is dan een student bij een specifieke opleiding bij een specifieke instelling in een specifiek jaar.
+
+```{r}
+#| label: process-mining-filtered
+
+edges_to_remove <- process_map_full %>%
+  processmapR::get_flows() %>%
+  dplyr::filter(value < 0.05) %>%
+  transmute(from = from_id, to = to_id)
+
+edges_ids_to_remove <- process_map_full %>%
+  DiagrammeR::get_edge_df() %>%
+  as_tibble() %>%
+  semi_join(edges_to_remove, by = c("from", "to")) %>%
+  pull(id)
+
+process_map_filtered <- process_map_full %>%
+  DiagrammeR::select_edges_by_edge_id(edges = edges_ids_to_remove) %>%
+  DiagrammeR::delete_edges_ws() %>%
+  DiagrammeR::select_nodes_by_degree("deg == 0") %>%
+  DiagrammeR::delete_nodes_ws()
+
+# Conditional rendering based on output format
+if (knitr::is_html_output() | interactive()) {
+  processmapR::render_map(process_map_filtered)
+} else {
+  # For PDF output, export and include
+  map_file <- "data_kwaliteit_files/figure-pdf/process-mining-filtered.pdf"
+  processmapR::export_map(filtered_graph, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+```
+
+De standaard flow, van submitted -> received -> offered -> enrolled is de meest voorkomende flow. Ook withdrawn als status komt vaak voor. De percentages zijn het aantal aanmeldcases waarin de statusverandering (lijnen) of de status (knooppunt) voorkomt.
