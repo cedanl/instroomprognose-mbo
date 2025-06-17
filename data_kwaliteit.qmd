@@ -255,21 +255,56 @@ knitr::kable(schooljaar_comparison,
 ggplot(schooljaar_comparison, aes(x = factor(schooljaar_afgeleid), y = aantal, fill = factor(schooljaar))) +
     geom_bar(stat = "identity", position = "stack") +
     scale_fill_manual(values = c(
-        "0" = "grey",     # Donkerblauw
+        "0" = "#E8A15D",     # Donkerblauw "
         "2021" = "#B4C7E7",  # Lichtblauw
         "2022" = "#8FAADC",  # Middenblauw
         "2023" = "#5B9BD5",  # Blauw
         "2024" = "#4472C4"  # Donkerblauw
     )) +
     labs(
-        title = "Verdeling van afgeleid schooljaar versus originele schooljaar",
-        subtitle = "Op basis van created_date",
+        title = "Verdeling van afgeleid schooljaar versus origineel schooljaar",
+        subtitle = "Afgeleid op basis van datum en startmoment",
         x = "Afgeleid schooljaar",
-        y = "Aantal aanmeldingen (per status)",
-        fill = "Originele schooljaar"
+        y = "Aantal statusveranderingen",
+        fill = "Origineel schooljaar"
     ) +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Vergelijking met eerder schooljaar
+
+```{r}
+yearly_metrics_afgeleid <- applications_with_conclusion %>%
+  group_by(schooljaar_afgeleid) %>%
+  summarise(
+    total_applications = n(),
+    unique_students = n_distinct(bsnhash),
+    conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(schooljaar_afgeleid)
+
+yearly_metrics_afgeleid %>%
+  pivot_longer(cols = c(total_applications, unique_students), 
+               names_to = "metric", 
+               values_to = "value") %>%
+  mutate(metric = if_else(metric == "total_applications", 
+                         "Aantal Statusveranderingen", 
+                         "Unieke Studenten")) %>%
+  ggplot(aes(x = factor(schooljaar_afgeleid), y = value, group = metric, color = metric)) +
+  geom_line() +
+  geom_point(size = 2) +
+  theme_minimal() +
+  labs(title = "Trend van Aanmeldingen per Jaar",
+       subtitle = "Vergelijking tussen aantal statusveranderingen en unieke studenten",
+       x = "Schooljaar",
+       y = "Aantal",
+       color = "Metriek") +
+  scale_y_continuous(labels = comma) +
+  scale_color_manual(values = c("Aantal Statusveranderingen" = "#4393C3", "Unieke Studenten" = "#E8A15D")) +
+  theme(legend.position = "bottom")
+
 ```
 
 We zien dat alle waardes 0 zijn omgezet naar naar daadwerkelijke jaren. Ook zien we dat voor andere jaren dan 2023 en 2024 het aantal aanwezige aanmeldingsstatussen veel lager is.
@@ -391,7 +426,7 @@ if (knitr::is_html_output() | interactive()) {
 } else {
   # For PDF output, export and include
   map_file <- "data_kwaliteit_files/figure-pdf/process-mining-filtered.pdf"
-  processmapR::export_map(filtered_graph, file_name = map_file)
+  processmapR::export_map(process_map_filtered, file_name = map_file)
   knitr::include_graphics(map_file)
 }
 ```

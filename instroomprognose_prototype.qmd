@@ -58,7 +58,22 @@ programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
 
 ```
 
-## 2. Dashboard Aanmeldingsoverzicht
+We voegen de referentie data toe aan het bronbestand.
+
+```{r}
+#| label: enrich-data
+#| cache: false
+#| freeze: false
+# Join with reference data
+applications_enriched <- applications %>%
+    # Convert opleidingcode to integer for joining (drops a small % of non-numeric values)
+    mutate(opleidingcode = as.integer(opleidingcode)) %>%
+    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) %>%
+    left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
+
+```
+
+## 2. Aanmeldingsoverzicht
 
 Hier creëren we KPI's en visualisaties die ons hoofddashboard zullen vormen. Door trends over de jaren heen te analyseren, kunnen we inzicht krijgen in het aanmeldingsvolume en conversiepercentages. Dit is essentieel om te begrijpen of er specifieke jaren zijn met afwijkende patronen.
 
@@ -115,18 +130,19 @@ yearly_metrics %>%
                names_to = "metric", 
                values_to = "value") %>%
   mutate(metric = if_else(metric == "total_applications", 
-                         "Totaal Aanmeldingen", 
+                         "Aantal Statusveranderingen", 
                          "Unieke Studenten")) %>%
-  ggplot(aes(x = factor(schooljaar), y = value, group = metric, color = metric)) +
-  geom_line(size = 1.2) +
-  geom_point(size = 3) +
+  ggplot(aes(x = factor(schooljaar), y = value, group = metric, color = metric), fill = c("Aantal Statusveranderingen" = "#1976D2", "Unieke Studenten" = "#FF9800")) +
+  geom_line() +
+  geom_point(size = 2) +
   theme_minimal() +
   labs(title = "Trend van Aanmeldingen per Jaar",
-       subtitle = "Vergelijking tussen totaal aantal aanmeldingen en unieke studenten",
+       subtitle = "Vergelijking tussen aantal statusveranderingen en unieke studenten",
        x = "Schooljaar",
        y = "Aantal",
        color = "Metriek") +
   scale_y_continuous(labels = comma) +
+  scale_color_manual(values = c("Aantal Statusveranderingen" = "#4393C3", "Unieke Studenten" = "#E8A15D")) +
   theme(legend.position = "bottom")
 
 ```
