@@ -9,6 +9,41 @@
     ]
   },
   "Packages": {
+    "BH": {
+      "Package": "BH",
+      "Version": "1.87.0-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "468d9a03ba57f22ebde50060fd13ba9f"
+    },
+    "DiagrammeR": {
+      "Package": "DiagrammeR",
+      "Version": "1.0.11",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "RColorBrewer",
+        "cli",
+        "dplyr",
+        "glue",
+        "htmltools",
+        "htmlwidgets",
+        "igraph",
+        "magrittr",
+        "purrr",
+        "readr",
+        "rlang",
+        "rstudioapi",
+        "scales",
+        "stringr",
+        "tibble",
+        "tidyr",
+        "viridisLite",
+        "visNetwork"
+      ],
+      "Hash": "584c1e1cbb6f9b6c3b0f4ef0ad960966"
+    },
     "MASS": {
       "Package": "MASS",
       "Version": "7.3-60.2",
@@ -71,17 +106,6 @@
         "utils"
       ],
       "Hash": "e7bdd9ee90e96921ca8a0f1972d66682"
-    },
-    "S7": {
-      "Package": "S7",
-      "Version": "0.2.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "utils"
-      ],
-      "Hash": "5deb66b3ae702137e1f4162c11861e76"
     },
     "V8": {
       "Package": "V8",
@@ -314,17 +338,6 @@
       ],
       "Hash": "8b7222e9d9eb5178eea545c0c4d33fc2"
     },
-    "coro": {
-      "Package": "coro",
-      "Version": "1.1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "rlang"
-      ],
-      "Hash": "4998c8836ff95c90993a4eb8d853df71"
-    },
     "cpp11": {
       "Package": "cpp11",
       "Version": "0.5.1",
@@ -360,6 +373,19 @@
         "sys"
       ],
       "Hash": "09fd631e607a236f8cc7f9604db32cb8"
+    },
+    "crosstalk": {
+      "Package": "crosstalk",
+      "Version": "1.2.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R6",
+        "htmltools",
+        "jsonlite",
+        "lazyeval"
+      ],
+      "Hash": "ab12c7b080a57475248a30f4db6298c0"
     },
     "curl": {
       "Package": "curl",
@@ -498,6 +524,35 @@
       ],
       "Hash": "fedd9d00c2944ff00a0e2696ccf048ec"
     },
+    "edeaR": {
+      "Package": "edeaR",
+      "Version": "0.9.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "bupaR",
+        "cli",
+        "data.table",
+        "dplyr",
+        "ggplot2",
+        "ggthemes",
+        "glue",
+        "hms",
+        "lifecycle",
+        "lubridate",
+        "miniUI",
+        "purrr",
+        "rlang",
+        "shiny",
+        "shinyTime",
+        "stringr",
+        "tibble",
+        "tidyr",
+        "zoo"
+      ],
+      "Hash": "91b4b7339e646f411bb4da457835d7b2"
+    },
     "ellipsis": {
       "Package": "ellipsis",
       "Version": "0.3.2",
@@ -508,30 +563,6 @@
         "rlang"
       ],
       "Hash": "bb0eec2fe32e88d9e2836c2f73ea2077"
-    },
-    "ellmer": {
-      "Package": "ellmer",
-      "Version": "0.1.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "tidyverse",
-      "RemoteRepo": "ellmer",
-      "RemoteRef": "main",
-      "RemoteSha": "7a4855ed9a958070bb06d19c28a57b7a7fd97c7c",
-      "Requirements": [
-        "R6",
-        "S7",
-        "cli",
-        "coro",
-        "glue",
-        "httr2",
-        "jsonlite",
-        "later",
-        "promises",
-        "rlang"
-      ],
-      "Hash": "c9552de93fb957f5c2ff014580980ef2"
     },
     "evaluate": {
       "Package": "evaluate",
@@ -618,32 +649,6 @@
       ],
       "Hash": "7f48af39fa27711ea5fbd183b399920d"
     },
-    "gander": {
-      "Package": "gander",
-      "Version": "0.0.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "simonpcouch",
-      "RemoteRepo": "gander",
-      "RemoteRef": "main",
-      "RemoteSha": "92640650dc313f3850e8605c58cd8cb253663416",
-      "Requirements": [
-        "R",
-        "cli",
-        "ellmer",
-        "glue",
-        "miniUI",
-        "purrr",
-        "rlang",
-        "rstudioapi",
-        "shiny",
-        "streamy",
-        "treesitter",
-        "treesitter.r"
-      ],
-      "Hash": "d6f161af727fa77a405e50296136d46c"
-    },
     "generics": {
       "Package": "generics",
       "Version": "0.1.3",
@@ -694,6 +699,25 @@
         "withr"
       ],
       "Hash": "44c6a2f8202d5b7e878ea274b1092426"
+    },
+    "ggthemes": {
+      "Package": "ggthemes",
+      "Version": "5.1.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "ggplot2",
+        "graphics",
+        "grid",
+        "lifecycle",
+        "methods",
+        "purrr",
+        "scales",
+        "stringr",
+        "tibble"
+      ],
+      "Hash": "16a4974681fc751a09a1250431361896"
     },
     "gh": {
       "Package": "gh",
@@ -851,6 +875,21 @@
       ],
       "Hash": "d55aa087c47a63ead0f6fc10f8fa1ee0"
     },
+    "httr": {
+      "Package": "httr",
+      "Version": "1.4.7",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "R6",
+        "curl",
+        "jsonlite",
+        "mime",
+        "openssl"
+      ],
+      "Hash": "ac107251d9d9fd72f0ca8049988f1d7f"
+    },
     "httr2": {
       "Package": "httr2",
       "Version": "1.1.0",
@@ -871,6 +910,29 @@
         "withr"
       ],
       "Hash": "0f14199bbd820a9fca398f2df40994f1"
+    },
+    "igraph": {
+      "Package": "igraph",
+      "Version": "2.1.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "Matrix",
+        "R",
+        "cli",
+        "cpp11",
+        "grDevices",
+        "graphics",
+        "lifecycle",
+        "magrittr",
+        "methods",
+        "pkgconfig",
+        "rlang",
+        "stats",
+        "utils",
+        "vctrs"
+      ],
+      "Hash": "db7352c3d239d0a319d2e3d0d040ed16"
     },
     "ini": {
       "Package": "ini",
@@ -994,6 +1056,16 @@
         "utils"
       ],
       "Hash": "cc5ac1ba4c238c7ca9fa6a87ca11a7e2"
+    },
+    "lazyeval": {
+      "Package": "lazyeval",
+      "Version": "0.2.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "d908914ae53b04d4c0c0fd72ecc35370"
     },
     "lifecycle": {
       "Package": "lifecycle",
@@ -1129,28 +1201,6 @@
       ],
       "Hash": "37a7f0abce0349f5950ce49f38c7626b"
     },
-    "pal": {
-      "Package": "pal",
-      "Version": "0.0.2",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "simonpcouch",
-      "RemoteRepo": "pal",
-      "RemoteRef": "main",
-      "RemoteSha": "1cd81736ee11cfaea1fd2466025dffcbdb845c3c",
-      "Requirements": [
-        "cli",
-        "coro",
-        "ellmer",
-        "glue",
-        "miniUI",
-        "rlang",
-        "rstudioapi",
-        "shiny"
-      ],
-      "Hash": "9b58182e5d014ddbd5aac3d5f5994577"
-    },
     "pillar": {
       "Package": "pillar",
       "Version": "1.10.1",
@@ -1244,6 +1294,38 @@
       ],
       "Hash": "2ec30ffbeec83da57655b850cf2d3e0e"
     },
+    "plotly": {
+      "Package": "plotly",
+      "Version": "4.10.4",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "RColorBrewer",
+        "base64enc",
+        "crosstalk",
+        "data.table",
+        "digest",
+        "dplyr",
+        "ggplot2",
+        "htmltools",
+        "htmlwidgets",
+        "httr",
+        "jsonlite",
+        "lazyeval",
+        "magrittr",
+        "promises",
+        "purrr",
+        "rlang",
+        "scales",
+        "tibble",
+        "tidyr",
+        "tools",
+        "vctrs",
+        "viridisLite"
+      ],
+      "Hash": "a1ac5c03ad5ad12b9d1597e00e23c3dd"
+    },
     "praise": {
       "Package": "praise",
       "Version": "1.0.0",
@@ -1260,6 +1342,39 @@
         "R"
       ],
       "Hash": "6b01fc98b1e86c4f705ce9dcfd2f57c7"
+    },
+    "processmapR": {
+      "Package": "processmapR",
+      "Version": "0.5.6",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "BH",
+        "DiagrammeR",
+        "R",
+        "Rcpp",
+        "bupaR",
+        "cli",
+        "data.table",
+        "dplyr",
+        "edeaR",
+        "forcats",
+        "ggplot2",
+        "glue",
+        "hms",
+        "htmltools",
+        "htmlwidgets",
+        "lifecycle",
+        "miniUI",
+        "plotly",
+        "purrr",
+        "rlang",
+        "scales",
+        "shiny",
+        "stringr",
+        "tidyr"
+      ],
+      "Hash": "d2706d22b443120e4b39ca2e71d3dc1a"
     },
     "processx": {
       "Package": "processx",
@@ -1669,6 +1784,17 @@
       ],
       "Hash": "4b4477baa9a939c5577e5ddb4bf01f28"
     },
+    "shinyTime": {
+      "Package": "shinyTime",
+      "Version": "1.0.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "htmltools",
+        "shiny"
+      ],
+      "Hash": "836c3464fb0f2ea865ed4c35dcdc1eda"
+    },
     "slider": {
       "Package": "slider",
       "Version": "0.3.2",
@@ -1704,24 +1830,6 @@
         "R"
       ],
       "Hash": "5f5a7629f956619d519205ec475fe647"
-    },
-    "streamy": {
-      "Package": "streamy",
-      "Version": "0.0.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteUsername": "simonpcouch",
-      "RemoteRepo": "streamy",
-      "RemoteRef": "main",
-      "RemoteSha": "b14064407ede04caad4ae6e896a22a70b926e63c",
-      "Requirements": [
-        "cli",
-        "coro",
-        "rlang",
-        "rstudioapi"
-      ],
-      "Hash": "846f0b2d1a3342a2d60d4ddb2ef463af"
     },
     "stringi": {
       "Package": "stringi",
@@ -1910,30 +2018,6 @@
       ],
       "Hash": "3ec7e3ddcacc2d34a9046941222bf94d"
     },
-    "treesitter": {
-      "Package": "treesitter",
-      "Version": "0.1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "R6",
-        "cli",
-        "rlang",
-        "vctrs"
-      ],
-      "Hash": "22a579e4ac2ddd021df1791da7fd080f"
-    },
-    "treesitter.r": {
-      "Package": "treesitter.r",
-      "Version": "1.1.0",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R"
-      ],
-      "Hash": "067c058dbd496c4cd696449870b11d52"
-    },
     "tzdb": {
       "Package": "tzdb",
       "Version": "0.4.0",
@@ -2024,6 +2108,24 @@
         "R"
       ],
       "Hash": "c826c7c4241b6fc89ff55aaea3fa7491"
+    },
+    "visNetwork": {
+      "Package": "visNetwork",
+      "Version": "2.1.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "grDevices",
+        "htmltools",
+        "htmlwidgets",
+        "jsonlite",
+        "magrittr",
+        "methods",
+        "stats",
+        "utils"
+      ],
+      "Hash": "3e48b097e8d9a91ecced2ed4817a678d"
     },
     "vroom": {
       "Package": "vroom",
@@ -2157,6 +2259,21 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "fcc4bd8e6da2d2011eb64a5e5cc685ab"
+    },
+    "zoo": {
+      "Package": "zoo",
+      "Version": "1.8-14",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "grDevices",
+        "graphics",
+        "lattice",
+        "stats",
+        "utils"
+      ],
+      "Hash": "d55a14a07e7f0b4a66f432198bcca194"
     }
   }
 }

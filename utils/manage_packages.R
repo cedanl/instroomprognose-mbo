@@ -81,15 +81,15 @@ packages_cran <- c(
 # Include both the package name (for loading) and the account name (for renv snapshot)
 packages_github <- c(
     #"vusa",            # Utilise packages from the VU team
-    "pal",              # pal for using llm assistants
-    "gander"#,
+    #"pal",              # pal for using llm assistants
+    #"gander"#,
     #"shinychat"
 )
 
 packages_github_with_account <- c(
     #"vusaverse/vusa",
-    "simonpcouch/pal",
-    "simonpcouch/gander"#,
+    #"simonpcouch/pal",
+    #"simonpcouch/gander"#,
     #"posit-dev/shinychat"
 )
 
@@ -106,35 +106,38 @@ packages_renv <- c(packages_cran, packages_github)
 
 #'*INFO* Fix for packages from github, install them first
 install_if_missing <- function(packages, packages_to_install) {
-    missing <- !sapply(packages, requireNamespace, quietly = TRUE)
-    if (any(missing)) {
-        install.packages(packages_to_install[missing])
-    }
+  missing <- !sapply(packages, requireNamespace, quietly = TRUE)
+  if (any(missing)) {
+    install.packages(packages_to_install[missing])
+  }
 }
 
 install_if_missing(packages_github, packages_github_with_account)
 
 
 options(renv.snapshot.filter = function(project) {
-    return(packages_renv)
+  return(packages_renv)
 })
 
 # TODO Un-edit when adding packages above to include them in snapshot
 # renv::snapshot(type = "custom")
 
 # TODO Run with clean = TRUE to remove all packages that are added but not in snapshot
-renv::restore(confirm = FALSE)
+if (are_packages_up_to_date(packages_renv) == TRUE) {
+  message("✅ All packages already at correct versions. No need to restore.")
+} else {
+  # Only run restore if needed
+  renv::restore(confirm = FALSE)
+}
 
 
-# Load packages
 # TODO Set to TRUE when adding packages to check if there are problematic conflicts
-warn_conflicts <- FALSE
 suppressMessages(purrr::walk(packages, ~library(.x,
-                                                character.only = TRUE,
-                                                warn.conflicts = warn_conflicts)))
+                                                character.only = TRUE)))
 
 ## +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 ## WRITE-AND-CLEAR ####
 ## +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 suppressWarnings(clear_script_objects())
+
