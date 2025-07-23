@@ -31,7 +31,7 @@ execute:
 #| freeze: false
 
 # Load required libraries
-source("00_setup.R")
+source("utils/00_setup.R")
 
 ```
 
