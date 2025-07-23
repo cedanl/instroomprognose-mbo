@@ -28,12 +28,12 @@ source("utils/renv/activate.R")
 
 ## TODO: Scoop
 # Trigger load
-if (interactive() && file.exists("00_setup.R")) {
+if (interactive() && file.exists("utils/00_setup.R")) {
     # prompt of readline doesn't work from Rrofile
     message("Setup script detected. Run 00_setup.R? (press ENTER to run, ESC to skip):")
     response <- readline(" ")
     if (tolower(response) == "" || tolower(response) == "y") {
-        source("00_setup.R")
+        source("utils/00_setup.R")
     }
     rm(response)
 }
