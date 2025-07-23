@@ -27,5 +27,3 @@ brew_deps <- c(
 # Step 3: Install missing dependencies
 install_brew_packages(brew_deps)
 
-clear_script_objects()
-

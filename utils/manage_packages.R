@@ -130,7 +130,6 @@ if (are_packages_up_to_date(packages_renv) == TRUE) {
   renv::restore(confirm = FALSE)
 }
 
-
 # TODO Set to TRUE when adding packages to check if there are problematic conflicts
 suppressMessages(purrr::walk(packages, ~library(.x,
                                                 character.only = TRUE)))
@@ -139,5 +138,4 @@ suppressMessages(purrr::walk(packages, ~library(.x,
 ## WRITE-AND-CLEAR ####
 ## +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-suppressWarnings(clear_script_objects())
-
+clear_script_objects()
