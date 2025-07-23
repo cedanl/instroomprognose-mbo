@@ -24,12 +24,12 @@ source("utils/set_rstudio_prefs.R")
 load_all()
 
 message("🔧 Pas aan voor data van je eigen instelling: config.yml")
-message("🔍 Render voor analyse: Totaalbestand maken van losse VSV bestanden.qmd")
+message("🔍 Render voor analyse: Instroomprognose_prototype.qmd")
 #TODO Starting in R Studio works, interactive is more general, later on might need
 #to verify if this works in VS Code / Positron etc
 if (rstudioapi::isAvailable()) {
   rstudioapi::navigateToFile("config.yml")
-  rstudioapi::navigateToFile("Totaalbestand maken van losse VSV bestanden.qmd")
+  rstudioapi::navigateToFile("instroomprognose_prototype.qmd")
 }
 
 rm(list = ls())

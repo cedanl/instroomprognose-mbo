@@ -35,5 +35,4 @@ if (interactive() && file.exists("utils/00_setup.R")) {
     if (tolower(response) == "" || tolower(response) == "y") {
         source("utils/00_setup.R")
     }
-    rm(response)
 }
