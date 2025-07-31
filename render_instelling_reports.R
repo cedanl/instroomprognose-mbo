@@ -73,7 +73,6 @@ render_institution_report <- function(
 
     output_file <- paste0(brin_code, "_", safe_school_name, "_instroomanalyse.html")
 
-
     cat("Rendering report for:", school_name, "(", brin_code, ")\n")
     cat("Output file:", output_file, "\n")
 
@@ -108,8 +107,8 @@ render_institution_report <- function(
 #' @param brin_codes Vector of specific BRIN codes (when mode = "specific")
 #' @param years Vector of years to analyze
 #' @param config_env Configuration environment to use
-render_reports <- function(
-    mode = "specific",
+render_multiple_institution_reports <- function(
+    mode = "all",
     brin_codes = NULL,
     years = c(2023, 2024),
     config_env = "default"
@@ -186,28 +185,5 @@ render_reports <- function(
     }
 }
 
-# Simplified command line interface
-if (!interactive()) {
-    args <- commandArgs(trailingOnly = TRUE)
-
-    if (length(args) == 0) {
-        cat("Usage: Rscript render_instelling_reports.R [all|BRIN_CODE]\n")
-        cat("Examples:\n")
-        cat("  Rscript render_instelling_reports.R all\n")
-        cat("  Rscript render_instelling_reports.R 30RR\n")
-    } else if (args[1] == "all") {
-        render_reports(mode = "all")
-    } else {
-        render_reports(mode = "specific", brin_codes = args[1])
-    }
-}
-
-# Export functions for use in other scripts
-cat("Functions loaded successfully. Use render_reports() to start.\n")
-cat("Example usage:\n")
-cat("  render_reports(mode = 'all')\n")
-cat("  render_reports(mode = 'specific', brin_codes = c('30RR', '27EB'))\n")
-cat("  render_reports(mode = 'interactive')\n")
-
 # Uncomment to test:
-render_reports(mode = "specific", brin_codes = c("30RR"))
+# render_reports(mode = "specific", brin_codes = c("30RR"))
