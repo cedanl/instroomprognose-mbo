@@ -6,7 +6,6 @@ date: "`r format(Sys.time(), '%d %B %Y')`"
 params:
   brin_code: "30RR"
   school_name: "MBO Amersfoort"
-  comparison_mode: "relative_to_average"  # "absolute" or "relative_to_average"
   years: [2023, 2024]
 format: 
   html:

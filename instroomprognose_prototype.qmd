@@ -1,5 +1,5 @@
 ---
-title: "Instroomanalyse `r config::get('name')` - MVP"
+
 subtitle: "Eerste inzichten in aanmeldingsgegevens"
 author: "Corneel den Hartogh"
 affiliation: "CEDA - Npuls"
@@ -33,7 +33,15 @@ execute:
 # Load required libraries
 source("utils/00_setup.R")
 
+# Set config, change to cambo to run with real data from cambo
+Sys.setenv(R_CONFIG_ACTIVE = "cambo")
+
 ```
+
+---
+title: "Instroomanalyse `r config::get('name')` - MVP"
+---
+
 
 ## 1. Data inladen & prepareren
 
@@ -610,9 +618,10 @@ programs_plot_data <- rbind(
 )
 
 # Zorg ervoor dat de volgorde van de opleidingen correct is
+# Gebruik unique() om duplicaten te voorkomen in factor levels
 programs_plot_data$Opleidingsnaam <- factor(
   programs_plot_data$Opleidingsnaam, 
-  levels = rev(ordered_programs$Opleidingsnaam)  # rev() om dezelfde volgorde als plotly te krijgen
+  levels = rev(unique(ordered_programs$Opleidingsnaam))  # unique() voorkomt duplicaten
 )
 
 # Maak de ggplot
