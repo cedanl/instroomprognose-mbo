@@ -55,6 +55,9 @@ rsconnect/
 !/data/reference/
 !/data/metadata/
 
+# output files
+/output/*
+
 # quarto
 /_book/
 /_freeze/

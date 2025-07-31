@@ -33,6 +33,18 @@ if (interactive() && file.exists("utils/00_setup.R")) {
     message("Setup script detected. Run 00_setup.R? (press ENTER to run, ESC to skip):")
     response <- readline(" ")
     if (tolower(response) == "" || tolower(response) == "y") {
-        source("utils/00_setup.R")
+      source("utils/00_setup.R")
+      message("🔧 Pas aan voor data van je eigen instelling: config.yml")
+      message("🔍 Render voor analyse: Instroomprognose_prototype.qmd")
+      #TODO Starting in R Studio works, interactive is more general, later on might need
+      #to verify if this works in VS Code / Positron etc
+      if (rstudioapi::isAvailable()) {
+        rstudioapi::navigateToFile("config.yml")
+        rstudioapi::navigateToFile("instroomprognose_prototype.qmd")
+      }
+
+      rm(list = ls())
     }
+
+
 }
