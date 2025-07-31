@@ -1460,23 +1460,27 @@
     },
     "quarto": {
       "Package": "quarto",
-      "Version": "1.4.4",
+      "Version": "1.5.0",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
         "R",
         "cli",
+        "fs",
+        "htmltools",
         "jsonlite",
         "later",
+        "lifecycle",
         "processx",
         "rlang",
         "rmarkdown",
         "rstudioapi",
         "tools",
         "utils",
+        "xfun",
         "yaml"
       ],
-      "Hash": "af456d7a181750812bd8b2bfedb3ea4e"
+      "Hash": "2e3c725ab940c0fc720ca9f66c6bff44"
     },
     "ragg": {
       "Package": "ragg",
@@ -1617,14 +1621,14 @@
     },
     "rlang": {
       "Package": "rlang",
-      "Version": "1.1.5",
+      "Version": "1.1.6",
       "Source": "Repository",
-      "Repository": "CRAN",
+      "Repository": "RSPM",
       "Requirements": [
         "R",
         "utils"
       ],
-      "Hash": "724dcc1490cd7071ee75ca2994a5446e"
+      "Hash": "892124978869b74935dc3934c42bfe5a"
     },
     "rmarkdown": {
       "Package": "rmarkdown",

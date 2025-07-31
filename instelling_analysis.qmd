@@ -1,0 +1,818 @@
+---
+title: "Instroomanalyse `r params$school_name` (`r params$brin_code`)"
+subtitle: "Data kwaliteit en conversie analyse"
+author: "Corneel den Hartogh"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+params:
+  brin_code: "30RR"
+  school_name: "MBO Amersfoort"
+  years: [2023, 2024]
+format: 
+  html:
+    toc: true
+    toc-title: Inhoudsopgave
+    code-fold: true
+    code-summary: "Laat code zien"
+execute:
+  cache: true
+  freeze: auto
+  include: true
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| cache: false
+#| output: false
+#| include: false
+#| freeze: false
+
+# Load pipeline functions
+source("utils/00_setup.R")
+source("R/data_pipeline.R")
+source("R/data_quality.R")
+
+# Set default params if not available (for testing)
+if (!exists("params")) {
+  params <- list(
+    brin_code = "30RR",
+    school_name = "MBO Amersfoort", 
+    comparison_mode = "relative_to_average",
+    years = c(2023, 2024)
+  )
+}
+
+```
+
+## Executive Summary
+
+Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school_name`** (BRIN: `r params$brin_code`) voor de schooljaren `r paste(params$years, collapse = " en ")`.
+
+```{r}
+#| label: load-and-prepare-data
+#| cache: true
+
+# Load applications data and filter immediately for this institution only
+institution_data <- load_and_enrich_applications() %>%
+  filter_applications(
+    years = params$years,
+    brin_codes = params$brin_code
+  )
+
+# Group applications for this institution
+grouped_institution <- group_applications(institution_data, "full")
+
+cat("Data geladen voor", params$school_name, "\n")
+cat("Aantal rijen voor deze instelling:", nrow(institution_data), "\n")
+cat("Aantal gegroepeerde aanmeldingen:", nrow(grouped_institution), "\n")
+
+```
+
+## 1. Basis Statistieken
+
+Deze sectie toont de kernstatistieken voor `r params$school_name`. We analyseren het totale volume van aanmeldingen, het aantal unieke studenten, en de conversie van aanmelding naar inschrijving.
+
+```{r}
+#| label: basic-stats
+
+# Calculate statistics for this institution
+institution_stats <- calculate_summary_stats(institution_data, "full")
+
+# Create basic statistics table
+basic_stats <- data.frame(
+  Metriek = c("Totaal aanmeldingen", "Unieke studenten", "Conversie ratio", "Aanmeldingen per student"),
+  Waarde = c(
+    format(institution_stats$total_applications, big.mark = "."),
+    format(institution_stats$total_students, big.mark = "."),
+    paste0(round(institution_stats$average_conversion_rate * 100, 1), "%"),
+    round(institution_stats$applications_per_student, 2)
+  )
+)
+
+gt(basic_stats) %>%
+  tab_header(
+    title = paste("Basis Statistieken:", params$school_name),
+    subtitle = paste("Schooljaren", paste(params$years, collapse = " en "))
+  ) %>%
+  cols_label(
+    Metriek = "Metriek",
+    Waarde = "Waarde"
+  )
+
+```
+
+## 2. Data Kwaliteit Analyse
+
+Deze sectie analyseert de kwaliteit van de data voor `r params$school_name`. We kijken naar postcode validiteit en consistentie van schooljaren. Een goede data kwaliteit is essentieel voor betrouwbare analyses.
+
+```{r}
+#| label: data-quality-analysis
+
+# Analyze data quality for this institution
+quality_results <- analyze_data_quality(institution_data, by_group = "schooljaar")
+
+# Get quality summary
+quality_summary <- get_data_quality_summary(quality_results)
+
+cat("Overall Quality Score:", quality_summary$overall_quality_score, "%\n")
+
+```
+
+### 2.1 Postcode Kwaliteit
+
+```{r}
+#| label: postcode-quality
+
+# Show postcode quality table
+quality_results$postcode_analysis %>%
+  gt() %>%
+  tab_header(
+    title = "Postcode Kwaliteit per Jaar",
+    subtitle = params$school_name
+  ) %>%
+  cols_label(
+    schooljaar = "Schooljaar",
+    totaal_aanmeldingen = "Totaal",
+    geldige_postcodes = "Geldige Postcodes",
+    ongeldige_postcodes = "Ongeldige Postcodes",  
+    percentage_ongeldig = "% Ongeldig"
+  ) %>%
+  fmt_percent(
+    columns = percentage_ongeldig,
+    decimals = 1,
+    scale_values = FALSE
+  )
+
+```
+
+```{r}
+#| label: postcode-quality-plot
+#| fig-height: 4
+
+# Plot postcode quality if there are invalid postcodes
+if (nrow(quality_results$postcode_analysis) > 0 && any(quality_results$postcode_analysis$ongeldige_postcodes > 0)) {
+  
+  quality_results$postcode_analysis %>%
+    ggplot(aes(x = factor(schooljaar), y = ongeldige_postcodes)) +
+    geom_col(fill = "steelblue", alpha = 0.7) +
+    geom_text(aes(label = paste0(percentage_ongeldig, "%")), vjust = -0.5) +
+    labs(
+      title = paste("Ongeldige Postcodes per Jaar -", params$school_name),
+      x = "Schooljaar",
+      y = "Aantal Ongeldige Postcodes"
+    ) +
+    theme_minimal()
+    
+} else {
+  cat("Geen significante postcode kwaliteitsproblemen gevonden.")
+}
+
+```
+
+### 2.2 Schooljaar Kwaliteit
+
+Hier analyseren we de consistentie tussen het geregistreerde schooljaar en het schooljaar afgeleid uit datums. Dit helpt om data-invoerfouten te identificeren.
+
+```{r}
+#| label: schooljaar-quality-preparation
+
+# Create schooljaar_afgeleid based on dates (similar to data_kwaliteit.qmd)
+institution_data_with_derived <- institution_data %>%
+  mutate(
+    # Parse dates using correct column names
+    created_date_parsed = lubridate::ymd_hms(createdat),
+    start_date_parsed = lubridate::ymd(begindatum),
+    
+    # Derive schooljaar from created date (October = new school year)
+    schooljaar_afgeleid_created = case_when(
+      is.na(created_date_parsed) ~ NA_integer_,
+      month(created_date_parsed) >= 10 ~ year(created_date_parsed) + 1,
+      month(created_date_parsed) < 10 ~ year(created_date_parsed),
+      .default = NA_integer_
+    ),
+    
+    # Derive from start date (August = new school year)
+    schooljaar_afgeleid_startmoment = case_when(
+      is.na(start_date_parsed) ~ NA_integer_,
+      month(start_date_parsed) >= 8 ~ year(start_date_parsed),
+      month(start_date_parsed) < 8 ~ year(start_date_parsed) - 1,
+      .default = NA_integer_
+    ),
+    
+    # Create final derived schooljaar with logic from data_kwaliteit.qmd
+    schooljaar_numeric = as.integer(as.character(schooljaar)),
+    schooljaar_afgeleid = case_when(
+      # If all agree, use original
+      schooljaar_numeric == schooljaar_afgeleid_startmoment & 
+        schooljaar_numeric == schooljaar_afgeleid_created ~ schooljaar_numeric,
+      # If original is 0, use created date derivation
+      schooljaar_numeric == 0 ~ schooljaar_afgeleid_created,
+      # Early applications in August/September
+      schooljaar_numeric == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created == schooljaar_numeric - 1 &
+        month(created_date_parsed) %in% c(8,9) ~ schooljaar_numeric,
+      # Late applications on October 1st
+      schooljaar_numeric == schooljaar_afgeleid_startmoment &
+        schooljaar_afgeleid_created == schooljaar_numeric + 1 &
+        month(created_date_parsed) == 10 &
+        day(created_date_parsed) == 1 ~ schooljaar_numeric,
+      # Default to created date derivation
+      .default = coalesce(schooljaar_afgeleid_created, schooljaar_numeric)
+    )
+  )
+
+```
+
+```{r}
+#| label: schooljaar-quality-table
+
+# Create detailed schooljaar quality analysis like requested
+schooljaar_quality_analysis <- institution_data_with_derived %>%
+  # Create combination key for analysis
+  mutate(
+    combination_key = paste(schooljaar_numeric, schooljaar_afgeleid, sep = "-")
+  ) %>%
+  group_by(combination_key, schooljaar_numeric, schooljaar_afgeleid) %>%
+  summarise(
+    aantal_aanmeldingen = n(),
+    .groups = "drop"
+  ) %>%
+  arrange(schooljaar_numeric, schooljaar_afgeleid)
+
+# Calculate totals for percentage calculations
+totals_by_original <- schooljaar_quality_analysis %>%
+  group_by(schooljaar_numeric) %>%
+  summarise(total_original = sum(aantal_aanmeldingen), .groups = "drop")
+
+totals_by_derived <- schooljaar_quality_analysis %>%
+  group_by(schooljaar_afgeleid) %>%
+  summarise(total_derived = sum(aantal_aanmeldingen), .groups = "drop")
+
+# Create final table with percentages
+schooljaar_final_table <- schooljaar_quality_analysis %>%
+  left_join(totals_by_original, by = "schooljaar_numeric") %>%
+  left_join(totals_by_derived, by = "schooljaar_afgeleid") %>%
+  mutate(
+    pct_van_origineel_jaar = aantal_aanmeldingen / total_original * 100,
+    pct_van_afgeleid_jaar = aantal_aanmeldingen / total_derived * 100
+  ) %>%
+  select(
+    combination_key,
+    schooljaar_numeric, 
+    schooljaar_afgeleid,
+    aantal_aanmeldingen,
+    pct_van_origineel_jaar,
+    pct_van_afgeleid_jaar
+  )
+
+# Show the enhanced table
+schooljaar_final_table %>%
+  gt() %>%
+  tab_header(
+    title = "Schooljaar Kwaliteit Analyse",
+    subtitle = paste("Gedetailleerde analyse van schooljaar consistentie -", params$school_name)
+  ) %>%
+  cols_label(
+    combination_key = "Combinatie",
+    schooljaar_numeric = "Origineel Schooljaar",
+    schooljaar_afgeleid = "Afgeleid Schooljaar", 
+    aantal_aanmeldingen = "Aantal Aanmeldingen",
+    pct_van_origineel_jaar = "% van Origineel Jaar",
+    pct_van_afgeleid_jaar = "% van Afgeleid Jaar"
+  ) %>%
+  fmt_percent(
+    columns = c(pct_van_origineel_jaar, pct_van_afgeleid_jaar),
+    decimals = 1,
+    scale_values = FALSE
+  ) %>%
+  data_color(
+    columns = aantal_aanmeldingen,
+    colors = scales::col_numeric(
+      palette = c("white", "lightblue"),
+      domain = NULL
+    )
+  ) %>%
+  tab_footnote(
+    footnote = "% van Origineel Jaar: aandeel van dit jaar in het totaal van het originele schooljaar",
+    locations = cells_column_labels(columns = pct_van_origineel_jaar)
+  ) %>%
+  tab_footnote(
+    footnote = "% van Afgeleid Jaar: aandeel van dit jaar in het totaal van het afgeleide schooljaar", 
+    locations = cells_column_labels(columns = pct_van_afgeleid_jaar)
+  )
+
+cat("\\n**Interpretatie:** Deze tabel toont hoe goed de originele schooljaar registratie overeenkomt met het schooljaar afgeleid uit datums. Een perfecte match (bijv. 2023-2023) met 100% van origineel jaar betekent dat alle aanmeldingen van dat jaar correct geregistreerd zijn.\\n")
+
+```
+
+```{r}
+#| label: detailed-schooljaar-comparison
+
+# Show summary of schooljaar quality
+discrepancies <- schooljaar_final_table %>%
+  filter(schooljaar_numeric != schooljaar_afgeleid) %>%
+  nrow()
+
+if (discrepancies > 0) {
+  cat("\n📊 **Samenvatting Schooljaar Kwaliteit:**\n")
+  cat("- Aantal combinaties met afwijkingen:", discrepancies, "\n")
+  cat("- Totaal aantal combinaties:", nrow(schooljaar_final_table), "\n")
+  cat("- Percentage perfecte matches:", round((nrow(schooljaar_final_table) - discrepancies) / nrow(schooljaar_final_table) * 100, 1), "%\n\n")
+  
+  cat("**Aanbeveling:** Onderzoek de oorzaken van schooljaar discrepanties om data kwaliteit te verbeteren.\n")
+} else {
+  cat("✅ **Uitstekende Data Kwaliteit**: Alle schooljaren komen perfect overeen - geen aanpassingen nodig.\n")
+}
+
+```
+
+## 3. Conversie Overzicht
+
+Deze sectie geeft een overzicht van de algemene conversie van aanmeldingen naar inschrijvingen voor `r params$school_name`. We kijken naar de basisstatistieken die de effectiviteit van het aanmeldingsproces weergeven.
+
+```{r}
+#| label: conversion-overview
+
+# Create conversion overview
+conversion_summary <- data.frame(
+  Metriek = c(
+    "Totaal aanmeldingen (gegroepeerd)", 
+    "Unieke studenten",
+    "Totaal ingeschreven studenten",
+    "Gemiddelde conversie ratio"
+  ),
+  Waarde = c(
+    format(nrow(grouped_institution), big.mark = "."),
+    format(institution_stats$total_students, big.mark = "."),
+    format(sum(grouped_institution$is_enrolled, na.rm = TRUE), big.mark = "."),
+    paste0(round(institution_stats$average_conversion_rate * 100, 1), "%")
+  ),
+  Toelichting = c(
+    "Aantal gegroepeerde aanmeldingen in analyse",
+    "Aantal unieke studenten die zich hebben aangemeld", 
+    "Aantal studenten dat daadwerkelijk is ingeschreven",
+    "Percentage van studenten dat zich inschrijft na aanmelding"
+  )
+)
+
+conversion_summary %>%
+  gt() %>%
+  tab_header(
+    title = "Conversie Overzicht",
+    subtitle = paste("Kernstatistieken aanmeldingsproces -", params$school_name)
+  ) %>%
+  cols_label(
+    Metriek = "Metriek",
+    Waarde = "Waarde",
+    Toelichting = "Toelichting"
+  ) %>%
+  cols_width(
+    Toelichting ~ px(300)
+  )
+
+cat("\\n**Interpretatie:** Een hoge conversie ratio duidt op een effectief aanmeldingsproces waarbij studenten die zich aanmelden ook daadwerkelijk inschrijven. Dit kan wijzen op goede voorlichting, aantrekkelijke opleidingen, of een efficiënt aanmeldingsproces.\\n")
+
+```
+
+
+## 4. Analyse van Aanmeldingspatronen
+
+Deze sectie geeft een diepgaande analyse van hoe studenten zich aanmelden bij `r params$school_name`. We analyseren zowel studenten met één aanmelding als studenten met meerdere aanmeldingen om patronen en trends te identificeren.
+
+```{r}
+#| label: multiple-applications-analysis
+
+# Analyze multiple application patterns for this institution
+multiple_patterns <- analyze_multiple_applications(grouped_institution)
+
+# Create a flowchart-style visualization of application patterns
+if ("conversion_by_pattern" %in% names(multiple_patterns)) {
+  
+  # Prepare data for flowchart visualization
+  pattern_data <- multiple_patterns$conversion_by_pattern %>%
+    mutate(
+      # Ensure we have all categories including single applications
+      pattern_clean = case_when(
+        str_detect(pattern_type, "één aanmelding|single") ~ "Enkele aanmelding",
+        str_detect(pattern_type, "binnen.*instelling") ~ "Meerdere binnen instelling",
+        str_detect(pattern_type, "tussen.*instelling") ~ "Meerdere tussen instellingen",
+        str_detect(pattern_type, "binnen.*tussen") ~ "Meerdere binnen én tussen",
+        TRUE ~ pattern_type
+      )
+    ) %>%
+    arrange(desc(total))
+  
+  # Show the enhanced conversion table
+  pattern_data %>%
+    select(pattern_clean, total, enrolled, conversion_rate) %>%
+    gt() %>%
+    tab_header(
+      title = "Conversie per Aanmeldingspatroon",
+      subtitle = paste("Overzicht van alle aanmeldingsstrategieën -", params$school_name)
+    ) %>%
+    cols_label(
+      pattern_clean = "Aanmeldingspatroon",
+      total = "Totaal Studenten",
+      enrolled = "Aantal Ingeschreven", 
+      conversion_rate = "Conversie %"
+    ) %>%
+    fmt_percent(
+      columns = conversion_rate,
+      decimals = 1,
+      scale_values = FALSE
+    ) %>%
+    data_color(
+      columns = conversion_rate,
+      colors = scales::col_numeric(
+        palette = c("white", "darkgreen"),
+        domain = NULL
+      )
+    )
+    
+} else {
+  cat("Analyse van aanmeldingspatronen niet mogelijk - onvoldoende data.")
+}
+
+```
+
+### 4.1 Visualisatie Aanmeldingspatronen
+
+De onderstaande visualisaties tonen de verschillende aanmeldingsstrategieën van studenten en hun effectiviteit. We vergelijken het totale volume van elke strategie met de uiteindelijke inschrijvingen om te zien welke benaderingen het meest succesvol zijn.
+
+**Waarom is dit belangrijk?** Door te begrijpen hoe verschillende aanmeldingspatronen presteren, kan `r params$school_name` haar communicatie en begeleiding aanpassen aan verschillende types studenten.
+
+```{r}
+#| label: application-patterns-flowchart
+#| fig-height: 8
+
+# Create a comprehensive visualization showing the flow from applications to enrollment
+if (exists("pattern_data")) {
+  
+  # Create bar chart showing volumes and conversion
+  p1 <- pattern_data %>%
+    select(pattern_clean, total, enrolled) %>%
+    pivot_longer(cols = c(total, enrolled), names_to = "type", values_to = "count") %>%
+    mutate(
+      type = ifelse(type == "total", "Totaal Studenten", "Ingeschreven"),
+      pattern_clean = fct_reorder(pattern_clean, count, .fun = max)
+    ) %>%
+    ggplot(aes(x = pattern_clean, y = count, fill = type)) +
+    geom_col(position = "dodge", alpha = 0.8) +
+    scale_fill_manual(values = c("Totaal Studenten" = "steelblue", "Ingeschreven" = "darkgreen")) +
+    coord_flip() +
+    labs(
+      title = "Volume per Aanmeldingspatroon",
+      subtitle = "Vergelijking tussen totaal aantal studenten en ingeschrevenen",
+      x = "Aanmeldingspatroon",
+      y = "Aantal Studenten",
+      fill = "Type"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  
+  # Create conversion rate visualization
+  p2 <- pattern_data %>%
+    ggplot(aes(x = fct_reorder(pattern_clean, conversion_rate), y = conversion_rate)) +
+    geom_col(fill = "darkgreen", alpha = 0.7) +
+    geom_text(aes(label = paste0(round(conversion_rate, 1), "%")), 
+              hjust = -0.1, size = 3) +
+    coord_flip() +
+    scale_y_continuous(limits = c(0, max(pattern_data$conversion_rate) * 1.2)) +
+    labs(
+      title = "Conversiepercentage per Aanmeldingspatroon",
+      subtitle = "Hoe succesvol zijn verschillende aanmeldingsstrategieën?",
+      x = "Aanmeldingspatroon",
+      y = "Conversiepercentage (%)"
+    ) +
+    theme_minimal()
+  
+  # Display both plots with additional context
+  print(p1)
+  
+  cat("\n**Interpretatie Volume Chart:** De eerste grafiek toont het totale aantal studenten per aanmeldingspatroon (blauw) versus het aantal dat zich daadwerkelijk inschrijft (groen). Dit geeft inzicht in de absolute aantallen.\n\n")
+  
+  print(p2)
+  
+  cat("\n**Interpretatie Conversie Chart:** De tweede grafiek toont het conversiepercentage per patroon. Een hoger percentage betekent dat die aanmeldingsstrategie effectiever is in het omzetten van interesse naar daadwerkelijke inschrijving.\n")
+  
+} else {
+  cat("⚠️ Visualisatie niet mogelijk - onvoldoende data voor aanmeldingspatronen.")
+}
+
+```
+
+### 4.2 Verdeling Aantal Aanmeldingen
+
+Deze analyse toont hoe studenten zich gedragen qua aantal aanmeldingen. Dit is waardevol om te begrijpen:
+- **Volume Perspectief**: Hoeveel studenten kiezen voor elke strategie?
+- **Timing Inzichten**: Veranderen patronen tussen schooljaren?
+- **Strategische Planning**: Welke groepen studenten hebben extra ondersteuning nodig?
+
+**Algemeen Patroon**: De meeste studenten doen één aanmelding, maar een significante groep doet meerdere aanmeldingen - deze laatste groep heeft vaak andere behoeften en gedrag.
+
+```{r}
+#| label: application-count-distribution
+#| fig-height: 6
+
+# Plot distribution of application counts
+if ("application_count_distribution" %in% names(multiple_patterns)) {
+  
+  multiple_patterns$application_count_distribution %>%
+    filter(applications_total_number <= 6) %>%
+    ggplot(aes(x = students_pct, 
+               y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)),
+               fill = factor(schooljaar))) +
+    geom_col(position = "dodge") +
+    geom_text(aes(label = paste0(round(students_pct, 1), "%")), 
+              position = position_dodge(width = 0.9),
+              hjust = -0.2, size = 3) +
+    scale_fill_brewer(palette = "Set1") +
+    scale_x_continuous(limits = c(0, max(multiple_patterns$application_count_distribution$students_pct) * 1.2)) +
+    theme_minimal() +
+    labs(
+      title = paste("Verdeling Aantal Aanmeldingen per Student -", params$school_name),
+      subtitle = "Percentage studenten per aantal aanmeldingen",
+      x = "Percentage Studenten (%)",
+      y = "Aantal Aanmeldingen per Student",
+      fill = "Schooljaar"
+    )
+    
+} else {
+  cat("Data voor aanmeldingsverdeling niet beschikbaar.")
+}
+
+```
+
+```{r}
+#| label: conversion-by-application-count
+#| fig-height: 6
+
+# Plot conversion rate by application count
+multiple_patterns$conversion_by_count %>%
+  filter(applications_total_number <= 6) %>%
+  ggplot(aes(x = application_conversion_rate,
+             y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)),
+             fill = factor(schooljaar))) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(application_conversion_rate, 1), "%")), 
+            position = position_dodge(width = 0.9),
+            hjust = -0.2, size = 3) +
+  scale_fill_brewer(palette = "Set1") +
+  theme_minimal() +
+  labs(
+    title = paste("Conversie per Aanmelding naar Aantal Aanmeldingen -", params$school_name),
+    subtitle = "Percentage van aanmeldingen dat resulteert in inschrijving",
+    y = "Aantal Aanmeldingen per Student",
+    x = "Conversie per Aanmelding (%)",
+    fill = "Schooljaar"
+  )
+
+```
+
+## 5. Tijdsanalyse van Aanmeldingen
+
+Deze sectie analyseert wanneer studenten zich aanmelden gedurende het schooljaar. Dit helpt om seizoenspatronen te identificeren en marketingactiviteiten beter te timen. Het academisch jaar loopt van oktober tot september.
+
+```{r}
+#| label: timing-analysis
+
+# Analyze application timing patterns for this institution
+timing_analysis <- analyze_application_timing(institution_data)
+
+# Prepare timing data for analysis
+cat("Analyse van aanmeldingspatronen per maand voor", params$school_name, "\n")
+cat("Totaal aantal maanden met data:", nrow(timing_analysis$monthly_stats), "\n")
+cat("Jaar(jaren) in analyse:", paste(unique(timing_analysis$monthly_stats$schooljaar), collapse = ", "), "\n\n")
+
+```
+
+### 5.1 Maandelijkse Aanmeldingspatronen
+
+**Waarom Timing Belangrijk Is**: Het begrijpen van aanmeldingspieken helpt bij:
+- **Resource Planning**: Wanneer zijn er meer medewerkers nodig?
+- **Marketing Timing**: Wanneer moeten campagnes worden uitgevoerd?
+- **Capaciteitsplanning**: Wanneer kunnen we de meeste interesse verwachten?
+
+De grafiek toont duidelijke seizoenspatronen in aanmeldingen. Meestal zijn er piekperiodes in het voorjaar (maart-mei) en een tweede golf in de zomer. Let op verschillen tussen schooljaren - dit kan wijzen op veranderende studentgedrag of externe factoren.
+
+```{r}
+#| label: monthly-applications-plot
+#| fig-height: 5
+
+# Plot monthly application patterns
+if (nrow(timing_analysis$monthly_stats) > 0) {
+  
+  timing_analysis$monthly_stats %>%
+    ggplot(aes(x = academic_month, y = applications, 
+               colour = factor(schooljaar), group = factor(schooljaar))) +
+    geom_line(size = 1.2) +
+    geom_point(size = 2.5) +
+    scale_x_continuous(breaks = 1:12, labels = timing_analysis$month_labels) +
+    scale_colour_brewer(palette = "Set1") +
+    theme_minimal() +
+    labs(
+      title = paste("Maandelijkse Aanmeldingen -", params$school_name),
+      subtitle = "Academisch jaar: Oktober (maand 1) t/m September (maand 12)",
+      x = "Maand (Academisch Jaar)",
+      y = "Aantal Aanmeldingen",
+      colour = "Schooljaar"
+    ) +
+    theme(legend.position = "bottom")
+    
+} else {
+  cat("Onvoldoende data voor maandelijkse analyse.")
+}
+
+```
+
+### 5.2 Maandelijkse Conversiepatronen
+
+**Strategische Waarde van Timing**: Deze analyse onthult:
+- **Early Bird Effect**: Converteren vroege aanmelders beter?
+- **Seizoensinvloeden**: Zijn er maanden met structureel lagere conversie?
+- **Procesoptimalisatie**: Wanneer moeten extra inspanningen worden geleverd?
+
+**Hypothese**: Vroege aanmelders hebben vaak een hogere conversiekans omdat zij meer gemotiveerd zijn en meer tijd hebben voor de beslissing. Late aanmelders kunnen onder tijdsdruk staan of tweede keuzes maken.
+
+```{r}
+#| label: monthly-conversion-plot
+#| fig-height: 5
+
+# Plot monthly conversion patterns
+if (nrow(timing_analysis$monthly_stats) > 0) {
+  
+  timing_analysis$monthly_stats %>%
+    filter(!is.na(conversion_rate)) %>%
+    ggplot(aes(x = academic_month, y = conversion_rate,
+               colour = factor(schooljaar), group = factor(schooljaar))) +
+    geom_line(size = 1.2) +
+    geom_point(size = 2.5) +
+    scale_x_continuous(breaks = 1:12, labels = timing_analysis$month_labels) +
+    scale_colour_brewer(palette = "Set1") +
+    theme_minimal() +
+    labs(
+      title = paste("Maandelijkse Conversiepercentages -", params$school_name),
+      subtitle = "Hoe beïnvloedt het tijdstip van aanmelding de conversiekans?",
+      x = "Maand (Academisch Jaar)", 
+      y = "Conversiepercentage (%)",
+      colour = "Schooljaar"
+    ) +
+    theme(legend.position = "bottom")
+    
+} else {
+  cat("Onvoldoende data voor conversie-analyse per maand.")
+}
+
+```
+
+## 6. Status Transitie Analyse
+
+Deze sectie analyseert hoe de status van aanmeldingen verandert gedurende het schooljaar. We volgen de ontwikkeling van aanmeldingen van indiening tot uiteindelijke beslissing (inschrijving, afwijzing, of intrekking). De analyse is cumulatief: studenten behouden hun status tot deze verandert.
+
+```{r}
+#| label: status-transitions-analysis
+
+# Analyze status transitions for the most recent year
+recent_year <- max(params$years)
+status_analysis <- analyze_status_transitions(institution_data, target_year = recent_year)
+
+cat("Analyse van status overgangen voor schooljaar", recent_year, "\n")
+
+# Create proper cumulative status analysis
+if ("weekly_status_summary" %in% names(status_analysis) && nrow(status_analysis$weekly_status_summary) > 0) {
+  
+  cat("Aantal weken met data:", length(unique(status_analysis$weekly_status_summary$academic_week)), "\n")
+  
+  # Create cumulative data - each week adds to previous weeks' totals
+  cumulative_status <- status_analysis$weekly_status_summary %>%
+    arrange(academic_week, status_category) %>%
+    group_by(status_category) %>%
+    mutate(
+      cumulative_count = cumsum(count)
+    ) %>%
+    ungroup()
+  
+  cat("Cumulatieve data voorbereid voor", nrow(cumulative_status), "datapunten\n")
+  
+} else {
+  cat("⚠️ Onvoldoende data voor status transitie analyse\n")
+}
+
+```
+
+```{r}
+#| label: status-transitions-plot
+#| fig-height: 6
+
+# Plot status transitions over time
+if (nrow(status_analysis$weekly_status_summary) > 0) {
+  
+  # Define colors for different statuses
+  status_colors <- c(
+    "Submitted" = "#a9cce3",
+    "Received" = "#2980b9", 
+    "Offered" = "#1a5276",
+    "Enrolled" = "darkgreen",
+    "Rejected" = "#e74c3c",
+    "Withdrawn" = "#f39c12",
+    "Other" = "#95a5a6"
+  )
+  
+  # Plot stacked area chart
+  status_analysis$weekly_status_summary %>%
+    ggplot(aes(x = academic_week, y = count, 
+               fill = status_category, group = status_category)) +
+    geom_area(position = "stack", alpha = 0.8) +
+    scale_fill_manual(values = status_colors) +
+    theme_minimal() +
+    labs(
+      title = paste("Status Overgangen per Week -", params$school_name),
+      subtitle = paste("Schooljaar", recent_year),
+      x = "Week (academisch jaar)",
+      y = "Aantal Aanmeldingen",
+      fill = "Status"
+    ) +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position = "bottom"
+    )
+    
+} else {
+  cat("Onvoldoende data voor status transitie analyse.")
+}
+
+```
+
+## Conclusies en Aanbevelingen
+
+Op basis van deze analyse kunnen we het volgende concluderen voor **`r params$school_name`**:
+
+```{r}
+#| label: conclusions
+#| results: asis
+
+# Generate conclusions based on data
+conclusions <- c()
+
+# Data quality conclusion
+if (quality_summary$overall_quality_score >= 80) {
+  conclusions <- c(conclusions, "✅ **Data Kwaliteit**: Goed (score: " , quality_summary$overall_quality_score, "%)")
+} else {
+  conclusions <- c(conclusions, "⚠️ **Data Kwaliteit**: Aandacht vereist (score: " , quality_summary$overall_quality_score, "%)")
+}
+
+# Conversion rate conclusion
+conversion_rate <- institution_stats$average_conversion_rate * 100
+if (conversion_rate > 70) {
+  conclusions <- c(conclusions, paste0("✅ **Conversie**: Hoog conversiepercentage (", round(conversion_rate, 1), "%) - goede aantrekkingskracht"))
+} else if (conversion_rate > 50) {
+  conclusions <- c(conclusions, paste0("➡️ **Conversie**: Gemiddeld conversiepercentage (", round(conversion_rate, 1), "%) - ruimte voor verbetering"))
+} else {
+  conclusions <- c(conclusions, paste0("⚠️ **Conversie**: Laag conversiepercentage (", round(conversion_rate, 1), "%) - analyse van oorzaken nodig"))
+}
+
+# Volume conclusion  
+student_count <- institution_stats$total_students
+if (student_count > 500) {
+  conclusions <- c(conclusions, "📊 **Volume**: Grote instelling met voldoende data voor analyse")
+} else if (student_count > 100) {
+  conclusions <- c(conclusions, "📊 **Volume**: Middelgrote instelling")
+} else {
+  conclusions <- c(conclusions, "📊 **Volume**: Kleine instelling - voorzichtigheid met interpretatie")
+}
+
+# Multiple applications conclusion
+if (exists("multiple_patterns")) {
+  single_app_pct <- multiple_patterns$conversion_by_pattern %>%
+    filter(pattern_type == "Slechts één aanmelding") %>%
+    pull(conversion_rate) %>%
+    mean()
+  
+  multiple_app_pct <- multiple_patterns$conversion_by_pattern %>%
+    filter(pattern_type != "Slechts één aanmelding") %>%
+    pull(conversion_rate) %>%
+    mean()
+  
+  if (!is.na(multiple_app_pct) && multiple_app_pct > single_app_pct) {
+    conclusions <- c(conclusions, "🔄 **Meervoudige Aanmeldingen**: Studenten met meerdere aanmeldingen converteren beter")
+  }
+}
+
+# Print conclusions
+for (conclusion in conclusions) {
+  cat("- ", conclusion, "\n")
+}
+
+```
+
+### Vervolgstappen
+
+1. **Data Kwaliteit**: `r if(quality_summary$overall_quality_score < 80) "Verbeter data invoer processen" else "Handhaaf huidige kwaliteit"`
+2. **Conversie Optimalisatie**: `r if(exists("conversion_diff") && conversion_diff < 0) "Analyseer succesfactoren van beter presterende instellingen" else "Deel best practices met andere instellingen"`
+3. **Meervoudige Aanmeldingen**: `r if(exists("multiple_patterns")) "Ontwikkel gerichte begeleiding voor studenten met meerdere aanmeldingen" else "Analyseer aanmeldingspatronen"`
+4. **Timing Optimalisatie**: Pas marketingcampagnes aan op basis van seizoenspatronen in aanmeldingen
+5. **Status Transitie**: Optimaliseer administratieve processen voor snellere statuswijzigingen
+6. **Monitoring**: Implementeer maandelijkse monitoring van deze KPI's
+
+---
+*Rapport gegenereerd op `r Sys.Date()` met geautomatiseerde pipeline*
