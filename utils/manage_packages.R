@@ -123,12 +123,14 @@ options(renv.snapshot.filter = function(project) {
 # renv::snapshot(type = "custom")
 
 # TODO Run with clean = TRUE to remove all packages that are added but not in snapshot
-if (are_packages_up_to_date(packages_renv) == TRUE) {
-  message("✅ All packages already at correct versions. No need to restore.")
-} else {
-  # Only run restore if needed
-  renv::restore(confirm = FALSE)
-}
+# TODO I earlier had code for manually checkign updates due to pak. I think this code can be removed now
+# if (are_packages_up_to_date(packages_renv) == TRUE) {
+#   message("✅ All packages already at correct versions. No need to restore.")
+# } else {
+#   # Only run restore if needed
+#   renv::restore(confirm = FALSE)
+# }
+renv::restore(confirm = FALSE)
 
 # TODO Set to TRUE when adding packages to check if there are problematic conflicts
 suppressMessages(purrr::walk(packages, ~library(.x,
