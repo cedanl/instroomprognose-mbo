@@ -82,10 +82,19 @@ render_institution_report <- function(
     cat("Rendering report for:", school_name, "(", brin_code, ")\n")
     cat("Output file:", output_file, "\n")
     
-    # Render the report
+    # Render the report with explicit output format to ensure proper styling
     tryCatch({
         rmarkdown::render(
             "instelling_analysis.qmd",
+            output_format = rmarkdown::html_document(
+                toc = TRUE,
+                toc_title = "Inhoudsopgave",
+                code_folding = "hide",
+                code_download = TRUE,
+                theme = "bootstrap",
+                highlight = "tango",
+                css = NULL
+            ),
             output_file = output_file,
             params = list(
                 brin_code = brin_code,

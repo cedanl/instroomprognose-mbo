@@ -225,152 +225,153 @@ institution_data_with_derived <- institution_data %>%
 ```
 
 ```{r}
-#| label: schooljaar-comparison-table
+#| label: schooljaar-quality-table
 
-# Create comparison between original and derived schooljaar
-schooljaar_comparison <- institution_data_with_derived %>%
-  group_by(schooljaar_numeric, schooljaar_afgeleid) %>%
+# Create detailed schooljaar quality analysis like requested
+schooljaar_quality_analysis <- institution_data_with_derived %>%
+  # Create combination key for analysis
+  mutate(
+    combination_key = paste(schooljaar_numeric, schooljaar_afgeleid, sep = "-")
+  ) %>%
+  group_by(combination_key, schooljaar_numeric, schooljaar_afgeleid) %>%
   summarise(
     aantal_aanmeldingen = n(),
     .groups = "drop"
   ) %>%
   arrange(schooljaar_numeric, schooljaar_afgeleid)
 
-# Calculate percentages by original schooljaar
-schooljaar_summary <- institution_data_with_derived %>%
-  mutate(
-    is_changed = schooljaar_numeric != schooljaar_afgeleid
-  ) %>%
+# Calculate totals for percentage calculations
+totals_by_original <- schooljaar_quality_analysis %>%
   group_by(schooljaar_numeric) %>%
-  summarise(
-    totaal_aanmeldingen = n(),
-    aantal_gewijzigd = sum(is_changed, na.rm = TRUE),
-    pct_origineel = (totaal_aanmeldingen - aantal_gewijzigd) / totaal_aanmeldingen * 100,
-    pct_afgeleid = aantal_gewijzigd / totaal_aanmeldingen * 100,
-    .groups = "drop"
-  ) %>%
-  arrange(schooljaar_numeric)
+  summarise(total_original = sum(aantal_aanmeldingen), .groups = "drop")
 
-# Show the summary table
-schooljaar_summary %>%
+totals_by_derived <- schooljaar_quality_analysis %>%
+  group_by(schooljaar_afgeleid) %>%
+  summarise(total_derived = sum(aantal_aanmeldingen), .groups = "drop")
+
+# Create final table with percentages
+schooljaar_final_table <- schooljaar_quality_analysis %>%
+  left_join(totals_by_original, by = "schooljaar_numeric") %>%
+  left_join(totals_by_derived, by = "schooljaar_afgeleid") %>%
+  mutate(
+    pct_van_origineel_jaar = aantal_aanmeldingen / total_original * 100,
+    pct_van_afgeleid_jaar = aantal_aanmeldingen / total_derived * 100
+  ) %>%
+  select(
+    combination_key,
+    schooljaar_numeric, 
+    schooljaar_afgeleid,
+    aantal_aanmeldingen,
+    pct_van_origineel_jaar,
+    pct_van_afgeleid_jaar
+  )
+
+# Show the enhanced table
+schooljaar_final_table %>%
   gt() %>%
   tab_header(
     title = "Schooljaar Kwaliteit Analyse",
-    subtitle = paste("Vergelijking origineel vs afgeleid schooljaar -", params$school_name)
+    subtitle = paste("Gedetailleerde analyse van schooljaar consistentie -", params$school_name)
   ) %>%
   cols_label(
+    combination_key = "Combinatie",
     schooljaar_numeric = "Origineel Schooljaar",
-    totaal_aanmeldingen = "Aantal Aanmeldingen",
-    aantal_gewijzigd = "Aantal Aangepast",
-    pct_origineel = "% Origineel Correct",
-    pct_afgeleid = "% Aangepast"
+    schooljaar_afgeleid = "Afgeleid Schooljaar", 
+    aantal_aanmeldingen = "Aantal Aanmeldingen",
+    pct_van_origineel_jaar = "% van Origineel Jaar",
+    pct_van_afgeleid_jaar = "% van Afgeleid Jaar"
   ) %>%
   fmt_percent(
-    columns = c(pct_origineel, pct_afgeleid),
+    columns = c(pct_van_origineel_jaar, pct_van_afgeleid_jaar),
     decimals = 1,
     scale_values = FALSE
+  ) %>%
+  data_color(
+    columns = aantal_aanmeldingen,
+    colors = scales::col_numeric(
+      palette = c("white", "lightblue"),
+      domain = NULL
+    )
+  ) %>%
+  tab_footnote(
+    footnote = "% van Origineel Jaar: aandeel van dit jaar in het totaal van het originele schooljaar",
+    locations = cells_column_labels(columns = pct_van_origineel_jaar)
+  ) %>%
+  tab_footnote(
+    footnote = "% van Afgeleid Jaar: aandeel van dit jaar in het totaal van het afgeleide schooljaar", 
+    locations = cells_column_labels(columns = pct_van_afgeleid_jaar)
   )
+
+cat("\\n**Interpretatie:** Deze tabel toont hoe goed de originele schooljaar registratie overeenkomt met het schooljaar afgeleid uit datums. Een perfecte match (bijv. 2023-2023) met 100% van origineel jaar betekent dat alle aanmeldingen van dat jaar correct geregistreerd zijn.\\n")
 
 ```
 
 ```{r}
 #| label: detailed-schooljaar-comparison
 
-# Show detailed comparison if there are discrepancies
-if (any(schooljaar_comparison$schooljaar_numeric != schooljaar_comparison$schooljaar_afgeleid, na.rm = TRUE)) {
+# Show summary of schooljaar quality
+discrepancies <- schooljaar_final_table %>%
+  filter(schooljaar_numeric != schooljaar_afgeleid) %>%
+  nrow()
+
+if (discrepancies > 0) {
+  cat("\n📊 **Samenvatting Schooljaar Kwaliteit:**\n")
+  cat("- Aantal combinaties met afwijkingen:", discrepancies, "\n")
+  cat("- Totaal aantal combinaties:", nrow(schooljaar_final_table), "\n")
+  cat("- Percentage perfecte matches:", round((nrow(schooljaar_final_table) - discrepancies) / nrow(schooljaar_final_table) * 100, 1), "%\n\n")
   
-  cat("\nGedetailleerde vergelijking tussen origineel en afgeleid schooljaar:\n")
-  
-  schooljaar_comparison %>%
-    filter(aantal_aanmeldingen > 0) %>%
-    gt() %>%
-    tab_header(
-      title = "Gedetailleerde Schooljaar Vergelijking",
-      subtitle = "Alle combinaties van origineel en afgeleid schooljaar"
-    ) %>%
-    cols_label(
-      schooljaar_numeric = "Origineel Schooljaar",
-      schooljaar_afgeleid = "Afgeleid Schooljaar", 
-      aantal_aanmeldingen = "Aantal Aanmeldingen"
-    ) %>%
-    data_color(
-      columns = aantal_aanmeldingen,
-      colors = scales::col_numeric(
-        palette = c("white", "lightblue"),
-        domain = NULL
-      )
-    )
-    
+  cat("**Aanbeveling:** Onderzoek de oorzaken van schooljaar discrepanties om data kwaliteit te verbeteren.\n")
 } else {
-  cat("✅ Alle schooljaren komen overeen - geen aanpassingen nodig.")
+  cat("✅ **Uitstekende Data Kwaliteit**: Alle schooljaren komen perfect overeen - geen aanpassingen nodig.\n")
 }
 
 ```
 
-## 3. Conversie Analyse
+## 3. Conversie Overzicht
 
-Deze sectie analyseert hoe verschillende aanmeldingspatronen van studenten de conversie naar inschrijving beïnvloeden. We kijken naar studenten die één aanmelding doen versus studenten die meerdere aanmeldingen indienen.
+Deze sectie geeft een overzicht van de algemene conversie van aanmeldingen naar inschrijvingen voor `r params$school_name`. We kijken naar de basisstatistieken die de effectiviteit van het aanmeldingsproces weergeven.
 
 ```{r}
-#| label: conversion-analysis
+#| label: conversion-overview
 
-# Analyze conversions by application pattern
-if ("applications_is_multiple" %in% names(grouped_institution)) {
-  
-  conversion_by_pattern <- grouped_institution %>%
-    mutate(
-      # Rename confusing variables to clearer names
-      heeft_meerdere_aanmeldingen = applications_is_multiple,
-      meerdere_binnen_instelling = applications_is_multiple_within_institution,
-      meerdere_tussen_instellingen = applications_is_multiple_across_institutions,
-      
-      # Create clear pattern categories
-      aanmeldingspatroon = case_when(
-        !heeft_meerdere_aanmeldingen ~ "Enkele aanmelding",
-        meerdere_binnen_instelling & meerdere_tussen_instellingen ~ "Meerdere: binnen én tussen instellingen",
-        meerdere_binnen_instelling ~ "Meerdere: binnen dezelfde instelling",
-        meerdere_tussen_instellingen ~ "Meerdere: tussen verschillende instellingen",
-        TRUE ~ "Meerdere: overig patroon"
-      )
-    ) %>%
-    group_by(aanmeldingspatroon) %>%
-    summarise(
-      aantal_studenten = n(),
-      aantal_ingeschreven = sum(is_enrolled, na.rm = TRUE),
-      conversie_percentage = mean(is_enrolled, na.rm = TRUE) * 100,
-      .groups = "drop"
-    ) %>%
-    arrange(desc(aantal_studenten))
-  
-  # Show conversion table
-  conversion_by_pattern %>%
-    gt() %>%
-    tab_header(
-      title = "Conversie per Aanmeldingspatroon",
-      subtitle = paste("Analyse van verschillende aanmeldingsstrategieën -", params$school_name)
-    ) %>%
-    cols_label(
-      aanmeldingspatroon = "Aanmeldingspatroon",
-      aantal_studenten = "Aantal Studenten",
-      aantal_ingeschreven = "Aantal Ingeschreven",
-      conversie_percentage = "Conversie %"
-    ) %>%
-    fmt_percent(
-      columns = conversie_percentage,
-      decimals = 1,
-      scale_values = FALSE
-    ) %>%
-    data_color(
-      columns = conversie_percentage,
-      colors = scales::col_numeric(
-        palette = c("white", "lightgreen"),
-        domain = NULL
-      )
-    )
-    
-} else {
-  cat("Conversie analyse niet mogelijk - onvoldoende data voor meerdere aanmeldingen.")
-}
+# Create conversion overview
+conversion_summary <- data.frame(
+  Metriek = c(
+    "Totaal aanmeldingen (gegroepeerd)", 
+    "Unieke studenten",
+    "Totaal ingeschreven studenten",
+    "Gemiddelde conversie ratio"
+  ),
+  Waarde = c(
+    format(nrow(grouped_institution), big.mark = "."),
+    format(institution_stats$total_students, big.mark = "."),
+    format(sum(grouped_institution$is_enrolled, na.rm = TRUE), big.mark = "."),
+    paste0(round(institution_stats$average_conversion_rate * 100, 1), "%")
+  ),
+  Toelichting = c(
+    "Aantal gegroepeerde aanmeldingen in analyse",
+    "Aantal unieke studenten die zich hebben aangemeld", 
+    "Aantal studenten dat daadwerkelijk is ingeschreven",
+    "Percentage van studenten dat zich inschrijft na aanmelding"
+  )
+)
+
+conversion_summary %>%
+  gt() %>%
+  tab_header(
+    title = "Conversie Overzicht",
+    subtitle = paste("Kernstatistieken aanmeldingsproces -", params$school_name)
+  ) %>%
+  cols_label(
+    Metriek = "Metriek",
+    Waarde = "Waarde",
+    Toelichting = "Toelichting"
+  ) %>%
+  cols_width(
+    Toelichting ~ px(300)
+  )
+
+cat("\\n**Interpretatie:** Een hoge conversie ratio duidt op een effectief aanmeldingsproces waarbij studenten die zich aanmelden ook daadwerkelijk inschrijven. Dit kan wijzen op goede voorlichting, aantrekkelijke opleidingen, of een efficiënt aanmeldingsproces.\\n")
 
 ```
 
@@ -437,6 +438,10 @@ if ("conversion_by_pattern" %in% names(multiple_patterns)) {
 
 ### 4.1 Visualisatie Aanmeldingspatronen
 
+De onderstaande visualisaties tonen de verschillende aanmeldingsstrategieën van studenten en hun effectiviteit. We vergelijken het totale volume van elke strategie met de uiteindelijke inschrijvingen om te zien welke benaderingen het meest succesvol zijn.
+
+**Waarom is dit belangrijk?** Door te begrijpen hoe verschillende aanmeldingspatronen presteren, kan `r params$school_name` haar communicatie en begeleiding aanpassen aan verschillende types studenten.
+
 ```{r}
 #| label: application-patterns-flowchart
 #| fig-height: 8
@@ -482,19 +487,29 @@ if (exists("pattern_data")) {
     ) +
     theme_minimal()
   
-  # Display both plots
+  # Display both plots with additional context
   print(p1)
+  
+  cat("\n**Interpretatie Volume Chart:** De eerste grafiek toont het totale aantal studenten per aanmeldingspatroon (blauw) versus het aantal dat zich daadwerkelijk inschrijft (groen). Dit geeft inzicht in de absolute aantallen.\n\n")
+  
   print(p2)
   
+  cat("\n**Interpretatie Conversie Chart:** De tweede grafiek toont het conversiepercentage per patroon. Een hoger percentage betekent dat die aanmeldingsstrategie effectiever is in het omzetten van interesse naar daadwerkelijke inschrijving.\n")
+  
 } else {
-  cat("Visualisatie niet mogelijk - onvoldoende data voor aanmeldingspatronen.")
+  cat("⚠️ Visualisatie niet mogelijk - onvoldoende data voor aanmeldingspatronen.")
 }
 
 ```
 
 ### 4.2 Verdeling Aantal Aanmeldingen
 
-Deze analyse toont hoe studenten zich gedragen qua aantal aanmeldingen. De meeste studenten doen één aanmelding, maar een significante groep doet meerdere aanmeldingen.
+Deze analyse toont hoe studenten zich gedragen qua aantal aanmeldingen. Dit is waardevol om te begrijpen:
+- **Volume Perspectief**: Hoeveel studenten kiezen voor elke strategie?
+- **Timing Inzichten**: Veranderen patronen tussen schooljaren?
+- **Strategische Planning**: Welke groepen studenten hebben extra ondersteuning nodig?
+
+**Algemeen Patroon**: De meeste studenten doen één aanmelding, maar een significante groep doet meerdere aanmeldingen - deze laatste groep heeft vaak andere behoeften en gedrag.
 
 ```{r}
 #| label: application-count-distribution
@@ -574,7 +589,12 @@ cat("Jaar(jaren) in analyse:", paste(unique(timing_analysis$monthly_stats$school
 
 ### 5.1 Maandelijkse Aanmeldingspatronen
 
-De grafiek toont duidelijke seizoenspatronen in aanmeldingen. Meestal zijn er piekperiodes in het voorjaar (maart-mei) en een tweede golf in de zomer.
+**Waarom Timing Belangrijk Is**: Het begrijpen van aanmeldingspieken helpt bij:
+- **Resource Planning**: Wanneer zijn er meer medewerkers nodig?
+- **Marketing Timing**: Wanneer moeten campagnes worden uitgevoerd?
+- **Capaciteitsplanning**: Wanneer kunnen we de meeste interesse verwachten?
+
+De grafiek toont duidelijke seizoenspatronen in aanmeldingen. Meestal zijn er piekperiodes in het voorjaar (maart-mei) en een tweede golf in de zomer. Let op verschillen tussen schooljaren - dit kan wijzen op veranderende studentgedrag of externe factoren.
 
 ```{r}
 #| label: monthly-applications-plot
@@ -608,7 +628,12 @@ if (nrow(timing_analysis$monthly_stats) > 0) {
 
 ### 5.2 Maandelijkse Conversiepatronen
 
-Deze analyse toont of het tijdstip van aanmelding invloed heeft op de kans op inschrijving. Vroege aanmelders hebben vaak een hogere conversiekans.
+**Strategische Waarde van Timing**: Deze analyse onthult:
+- **Early Bird Effect**: Converteren vroege aanmelders beter?
+- **Seizoensinvloeden**: Zijn er maanden met structureel lagere conversie?
+- **Procesoptimalisatie**: Wanneer moeten extra inspanningen worden geleverd?
+
+**Hypothese**: Vroege aanmelders hebben vaak een hogere conversiekans omdat zij meer gemotiveerd zijn en meer tijd hebben voor de beslissing. Late aanmelders kunnen onder tijdsdruk staan of tweede keuzes maken.
 
 ```{r}
 #| label: monthly-conversion-plot
@@ -653,8 +678,26 @@ recent_year <- max(params$years)
 status_analysis <- analyze_status_transitions(institution_data, target_year = recent_year)
 
 cat("Analyse van status overgangen voor schooljaar", recent_year, "\n")
-cat("Aantal unieke aanmeldingen geanalyseerd:", 
-    length(unique(paste(status_analysis$weekly_status_summary$academic_week))), "weken\n")
+
+# Create proper cumulative status analysis
+if ("weekly_status_summary" %in% names(status_analysis) && nrow(status_analysis$weekly_status_summary) > 0) {
+  
+  cat("Aantal weken met data:", length(unique(status_analysis$weekly_status_summary$academic_week)), "\n")
+  
+  # Create cumulative data - each week adds to previous weeks' totals
+  cumulative_status <- status_analysis$weekly_status_summary %>%
+    arrange(academic_week, status_category) %>%
+    group_by(status_category) %>%
+    mutate(
+      cumulative_count = cumsum(count)
+    ) %>%
+    ungroup()
+  
+  cat("Cumulatieve data voorbereid voor", nrow(cumulative_status), "datapunten\n")
+  
+} else {
+  cat("⚠️ Onvoldoende data voor status transitie analyse\n")
+}
 
 ```
 
