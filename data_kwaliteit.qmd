@@ -31,7 +31,7 @@ execute:
 #| freeze: false
 
 # Load required libraries
-source("00_setup.R")
+source("utils/00_setup.R")
 
 ```
 
@@ -75,7 +75,7 @@ applications_enriched <- applications %>%
 
 ## 2. Data kwaliteit
 
-### 2.1 Postcode kwaliteit
+### 2.1. Postcode kwaliteit
 
 We analyseren hoeveel aanmeldingen niet voldoen aan het Nederlandse postcode formaat (4 cijfers), verdeeld over de schooljaren.
 
@@ -130,7 +130,7 @@ ggplot(postcode_validation_by_year, aes(x = schooljaar, y = ongeldige_postcodes)
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-#### 2.1.1 Meest voorkomende ongeldige postcodes
+#### 2.1.1. Meest voorkomende ongeldige postcodes
 
 Laten we ook kijken naar de meest voorkomende ongeldige postcodecijfers-patronen:
 
@@ -149,9 +149,13 @@ knitr::kable(top_invalid_postcodes,
 
 ```
 
-### 2.2 Schooljaar kwaliteit
+### 2.2. Schooljaar kwaliteit
 
-Uit de eerdere analyses blijkt dat de variabele 'schooljaar' niet altijd correct is ingevuld, met name voor de waarde '0'. We leiden daarom een nieuwe schooljaar-variabele af op basis van de 'created_date' en startmoment. 
+Uit de eerdere analyses blijkt dat de variabele 'schooljaar' niet altijd correct is ingevuld, met name voor de waarde '0'. Ook zien we dat het schooljaar soms tot verwarring leidt (klopt het wel?).
+
+#### 2.2.1. Afgeleide schooljaar
+
+We leiden daarom een nieuwe schooljaar-variabele af op basis van de 'created_date' en startmoment. 
 
 ```{r}
 #| label: derive-school-year
@@ -272,7 +276,143 @@ ggplot(schooljaar_comparison, aes(x = factor(schooljaar_afgeleid), y = aantal, f
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-Vergelijking met eerder schooljaar
+
+#### 2.2.2. Nieuwe rijen toevoegen
+
+```{r}
+
+add_process_closure_events <- function(process_data) {
+  
+  # Identificeer finale statussen
+  final_statuses <- c("ENROLLED", "REJECTED", "WITHDRAWN")
+  
+  # Step 1: Detecteer case switches per student
+  student_cases <- process_data %>%
+    select(bsnhash, case_id, begindatum) %>%
+    distinct() %>%
+    arrange(bsnhash, begindatum) %>%
+    group_by(bsnhash) %>%
+    mutate(
+      next_case_id = lead(case_id),
+      next_case_begindatum = lead(begindatum),
+      # Als case_id verandert, oude case moet afgesloten worden
+      needs_closure_by_new_case = case_id != next_case_id & !is.na(next_case_id)
+    ) %>%
+    ungroup()
+  
+  # Step 2: Identificeer welke cases al afgesloten zijn
+  case_final_status <- process_data %>%
+    group_by(case_id) %>%
+    arrange(begindatum) %>%
+    summarise(
+      last_status = last(status),
+      last_date = last(begindatum),
+      is_already_closed = last_status %in% final_statuses,
+      .groups = "drop"
+    )
+  
+  # Step 3: Genereer WITHDRAWN events voor case switches
+  closure_by_new_case <- student_cases %>%
+    filter(needs_closure_by_new_case) %>%
+    left_join(case_final_status, by = "case_id") %>%
+    filter(!is_already_closed) %>%  # Alleen als nog niet afgesloten
+    transmute(
+      case_id = case_id,
+      status = "WITHDRAWN",
+      begindatum = next_case_begindatum,  # Withdrawn op moment van nieuwe aanmelding
+      closure_reason = "new_application"
+    )
+  
+  # Step 4: Genereer WITHDRAWN events voor 1 oktober cutoff
+  # Bepaal 1 oktober per schooljaar
+  october_cutoffs <- process_data %>%
+    select(case_id, schooljaar_afgeleid) %>%
+    distinct() %>%
+    mutate(
+      october_cutoff = as.Date(paste0(schooljaar_afgeleid, "-10-01"))
+    )
+  
+  closure_by_cutoff <- case_final_status %>%
+    filter(!is_already_closed) %>%  # Alleen nog openstaande cases
+    left_join(october_cutoffs, by = "case_id") %>%
+    filter(!is.na(october_cutoff)) %>%
+    # Alleen als laatste activiteit voor 1 oktober was
+    filter(last_date < october_cutoff) %>%
+    transmute(
+      case_id = case_id,
+      status = "WITHDRAWN",
+      begindatum = october_cutoff,
+      closure_reason = "october_cutoff"
+    )
+  
+  # Step 5: Combineer alle closure events
+  all_closure_events <- bind_rows(
+    closure_by_new_case,
+    closure_by_cutoff
+  ) %>%
+    # Voeg andere benodigde kolommen toe (van originele data)
+    left_join(
+      process_data %>% 
+        select(case_id, bsnhash, ketenid, schooljaar_afgeleid, opleidingcode, 
+               instellingserkenningscode, onderwijslocatiecode) %>% 
+        distinct(),
+      by = "case_id"
+    )
+  
+  # Step 6: Voeg closure events toe aan originele data
+  enhanced_process_data <- bind_rows(
+    process_data,
+    all_closure_events %>% select(-closure_reason)  # Verwijder hulpkolom
+  ) %>%
+    arrange(case_id, begindatum)
+  
+  # Return ook overzicht van toegevoegde events voor validatie
+  list(
+    data = enhanced_process_data,
+    added_events = all_closure_events %>%
+      count(closure_reason, name = "events_added")
+  )
+}
+
+```
+
+
+```{r}
+
+# Bestaande preparatie code...
+applications_prepare_expansion <- applications_with_conclusion %>%
+ # Verwijder rijen met missende waarden in essentiële velden
+ filter(!is.na(status), !is.na(begindatum)) %>%
+ # Creëer een unieke case_id (student + opleiding + instelling)
+ mutate(
+   case_id = paste(ketenid, bsnhash, schooljaar_afgeleid, opleidingcode, instellingserkenningscode, onderwijslocatiecode, sep = "_")
+ ) %>%
+  group_by(case_id) %>%
+  mutate(complete = lead(begindatum),
+         status_towards = lead(status))
+
+# NIEUWE STAP: Voeg closure events toe
+closure_result <- add_process_closure_events(applications_prepare_expansion)
+applications_expanded <- closure_result$data
+
+
+
+# Gebruik enhanced data voor process mining
+# log <- process_data_mboa_enhanced %>%
+#   convert_timestamps(c("start", "complete"), format = ymd_hms) |>
+#   activitylog(
+#    case_id = "case_id",
+#    activity_id = "activity", 
+#    timestamps = c("start", "complete"),
+#    resource_id = "instellingserkenningscode",
+#    order = "auto"
+#  )
+
+```
+
+### 2.3. Inzicht in veranderingen
+
+#### 2.3.1. Afgeleid schooljaar
 
 ```{r}
 yearly_metrics_afgeleid <- applications_with_conclusion %>%
@@ -309,9 +449,20 @@ yearly_metrics_afgeleid %>%
 
 We zien dat alle waardes 0 zijn omgezet naar naar daadwerkelijke jaren. Ook zien we dat voor andere jaren dan 2023 en 2024 het aantal aanwezige aanmeldingsstatussen veel lager is.
 
+#### 2.3.2. Inzicht in toegevoegde rijen
+
+Toon hoeveel events toegevoegd zijn
+
+```{r}
+
+closure_result$added_events %>%
+  knitr::kable(caption = "Toegevoegde WITHDRAWN events voor process closure")
+
+```
+
 ## 3. Process mining
 
-Bij een administratief proces is de data-kwaliteit de proces-kwaliteit. Door met process mining een zogenoemde procesmap maken, krijgen we een indruk van de proceskwaliteit.
+Bij een administratief proces is de data-kwaliteit de proces-kwaliteit. Door met process mining een zogenoemde procesmap maken, krijgen we een indruk van de procesrkwaliteit.
 
 ### Preparatie
 
@@ -328,18 +479,13 @@ process_data <- applications_with_conclusion %>%
    opleidingcode,              # Secondary case identifier
    instellingserkenningscode,  # Secondary case identifier
    onderwijslocatiecode,       # Secondary case identifier
-   schooljaar_afgeleid         # Secondary case identifier
+   schooljaar_afgeleid,        # Secondary case identifier
+   case_id
  ) %>%
  # Hernoem kolommen naar standaard bupaR structuur
  rename(
    activity = status,
    start = begindatum,
- ) %>%
- # Verwijder rijen met missende waarden in essentiële velden
- filter(!is.na(activity), !is.na(start)) %>%
- # Creëer een unieke case_id (student + opleiding + instelling)
- mutate(
-   case_id = paste(ketenid, bsnhash, schooljaar_afgeleid, opleidingcode, instellingserkenningscode, onderwijslocatiecode, sep = "_")
  )
 ```
 
