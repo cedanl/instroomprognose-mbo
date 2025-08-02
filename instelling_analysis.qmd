@@ -53,7 +53,7 @@ Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school
 #| cache: true
 
 # Load applications data and filter immediately for this institution only
-institution_data <- load_and_enrich_applications() %>%
+institution_data <- load_and_enrich_applications(config_env = "cambo") %>%
   filter_applications(
     years = params$years,
     brin_codes = params$brin_code
@@ -163,8 +163,6 @@ if (nrow(quality_results$postcode_analysis) > 0 && any(quality_results$postcode_
     ) +
     theme_minimal()
     
-} else {
-  cat("Geen significante postcode kwaliteitsproblemen gevonden.")
 }
 
 ```
@@ -678,25 +676,6 @@ status_analysis <- analyze_status_transitions(institution_data, target_year = re
 
 cat("Analyse van status overgangen voor schooljaar", recent_year, "\n")
 
-# Create proper cumulative status analysis
-if ("weekly_status_summary" %in% names(status_analysis) && nrow(status_analysis$weekly_status_summary) > 0) {
-  
-  cat("Aantal weken met data:", length(unique(status_analysis$weekly_status_summary$academic_week)), "\n")
-  
-  # Create cumulative data - each week adds to previous weeks' totals
-  cumulative_status <- status_analysis$weekly_status_summary %>%
-    arrange(academic_week, status_category) %>%
-    group_by(status_category) %>%
-    mutate(
-      cumulative_count = cumsum(count)
-    ) %>%
-    ungroup()
-  
-  cat("Cumulatieve data voorbereid voor", nrow(cumulative_status), "datapunten\n")
-  
-} else {
-  cat("⚠️ Onvoldoende data voor status transitie analyse\n")
-}
 
 ```
 
@@ -705,7 +684,7 @@ if ("weekly_status_summary" %in% names(status_analysis) && nrow(status_analysis$
 #| fig-height: 6
 
 # Plot status transitions over time
-if (nrow(status_analysis$weekly_status_summary) > 0) {
+if (nrow(status_analysis$result) > 0) {
   
   # Define colors for different statuses
   status_colors <- c(
@@ -719,26 +698,299 @@ if (nrow(status_analysis$weekly_status_summary) > 0) {
   )
   
   # Plot stacked area chart
-  status_analysis$weekly_status_summary %>%
-    ggplot(aes(x = academic_week, y = count, 
-               fill = status_category, group = status_category)) +
+  ggplot(status_analysis$result, 
+       aes(x = academic_week, y = count, 
+           fill = status_category, group = status_category)) +
     geom_area(position = "stack", alpha = 0.8) +
     scale_fill_manual(values = status_colors) +
     theme_minimal() +
-    labs(
-      title = paste("Status Overgangen per Week -", params$school_name),
-      subtitle = paste("Schooljaar", recent_year),
-      x = "Week (academisch jaar)",
-      y = "Aantal Aanmeldingen",
-      fill = "Status"
+    labs(title = "Aantal Aanmeldingen per Status per Week",
+         subtitle = "Schooljaar 2024",
+         x = "Week (academisch jaar)",
+         y = "Aantal Aanmeldingen",
+         fill = "Status") +
+    scale_x_continuous(
+        breaks = status_analysis$month_start_weeks$start_week,
+        labels = status_analysis$month_labels[status_analysis$month_start_weeks$academic_month],
+        expand = c(0, 0)
     ) +
+    scale_y_continuous(labels = comma,
+                       expand = c(0, 0)) +
     theme(
-      panel.grid.minor = element_blank(),
-      legend.position = "bottom"
+        panel.grid.minor = element_blank(),
+        legend.position = "bottom"
     )
     
 } else {
   cat("Onvoldoende data voor status transitie analyse.")
+}
+
+```
+
+## 7. Geografische Analyse Studentenherkomst
+
+Deze sectie toont waar studenten vandaan komen die zich inschrijven bij **`r params$school_name`** en hoe dit zich verhoudt tot de totale markt per postcode.
+
+```{r}
+#| label: geographic-market-analysis
+
+institution_data <- institution_data %>% mutate(postcodecijfers = as.numeric(postcodecijfers))
+
+# Calculate market share for this institution
+market_share_data <- calculate_market_share_by_postcode(
+    institution_data, 
+    institution_name = params$school_name,
+    years = params$years
+)
+
+# Summary statistics
+market_summary <- market_share_data %>%
+    group_by(schooljaar) %>%
+    summarise(
+        postcodes_with_students = sum(institution_students > 0),
+        total_postcodes = n(),
+        avg_market_share = mean(market_share_pct[institution_students > 0], na.rm = TRUE),
+        max_market_share = max(market_share_pct, na.rm = TRUE),
+        total_students = sum(institution_students),
+        .groups = "drop"
+    )
+
+cat("Geografische analyse voor", params$school_name, "\n")
+cat("Aantal postcodes in analyse:", nrow(market_share_data), "\n")
+cat("Schooljaren:", paste(unique(market_share_data$schooljaar), collapse = ", "), "\n")
+
+```
+
+```{r}
+#| label: market-share-summary-table
+
+# Show market share summary
+market_summary %>%
+    gt() %>%
+    tab_header(
+        title = paste("Marktaandeel Samenvatting:", params$school_name),
+        subtitle = "Geografische spreiding per schooljaar"
+    ) %>%
+    cols_label(
+        schooljaar = "Schooljaar",
+        postcodes_with_students = "Postcodes met studenten",
+        total_postcodes = "Totaal postcodes in analyse",
+        avg_market_share = "Gemiddeld marktaandeel (%)",
+        max_market_share = "Maximaal marktaandeel (%)",
+        total_students = "Totaal studenten"
+    ) %>%
+    fmt_number(
+        columns = c(postcodes_with_students, total_postcodes, total_students),
+        decimals = 0
+    ) %>%
+    fmt_number(
+        columns = c(avg_market_share, max_market_share),
+        decimals = 1
+    )
+
+```
+
+```{r}
+#| label: geographic-maps
+
+# Create maps for each year if we have geographic data and market share data
+if (nrow(market_share_data) > 0 && file.exists("data/reference/cbs_pc4_2024_v1.gpkg")) {
+    
+    for (year in params$years) {
+        cat("### Marktaandeel Kaart", year, "\n\n")
+        
+        # Create map for this year
+        year_map <- create_market_share_map(
+            market_share_data = market_share_data,
+            geo_data_path = "data/reference/cbs_pc4_2024_v1.gpkg",
+            target_year = year,
+            institution_name = params$school_name
+        )
+        
+        print(year_map)
+        cat("\n\n")
+    }
+} else {
+    cat("Geen geografische data beschikbaar voor kaarten.\n\n")
+}
+
+```
+
+```{r}
+
+year_map
+```
+
+
+```{r}
+#| label: top-postcodes-per-year-table
+
+# Find top postcodes per year
+if (nrow(market_share_data) > 0) {
+    top_postcodes_by_year <- market_share_data %>%
+        filter(institution_students > 0) %>%
+        group_by(schooljaar) %>%
+        arrange(desc(institution_students)) %>%
+        slice_head(n = 10) %>%
+        ungroup() %>%
+        select(schooljaar, postcode_4, institution_students, total_students, market_share_pct)
+    
+    # Display top postcodes table
+    top_postcodes_by_year %>%
+        gt() %>%
+        tab_header(
+            title = paste("Top 10 Postcodes per Jaar voor", params$school_name),
+            subtitle = "Gerangschikt op aantal studenten per jaar"
+        ) %>%
+        cols_label(
+            schooljaar = "Jaar",
+            postcode_4 = "Postcode",
+            institution_students = "Studenten",
+            total_students = "Totaal MBO Studenten",
+            market_share_pct = "Marktaandeel (%)"
+        ) %>%
+        fmt_number(
+            columns = c(institution_students, total_students),
+            decimals = 0
+        ) %>%
+        fmt_number(
+            columns = market_share_pct,
+            decimals = 1
+        ) %>%
+        tab_style(
+            style = cell_fill(color = "#f0f8ff"),
+            locations = cells_body(rows = market_share_pct > 50)
+        ) %>%
+        tab_style(
+            style = cell_fill(color = "#fff2e6"),
+            locations = cells_body(rows = schooljaar == max(params$years))
+        )
+} else {
+    cat("Geen postcodes met studenten gevonden voor", params$school_name)
+}
+
+```
+
+```{r}
+#| label: market-share-vs-population
+
+# Analyze market share vs population density
+if (nrow(market_share_data) > 0 && file.exists("data/reference/cbs_pc4_2024_v1.gpkg")) {
+    
+    # Load geographic data with population
+    postal_geo <- sf::st_read("data/reference/cbs_pc4_2024_v1.gpkg", quiet = TRUE)
+    
+    # Join market share with population data for most recent year
+    recent_year <- max(market_share_data$schooljaar)
+    market_population <- market_share_data %>%
+        filter(schooljaar == recent_year) %>%
+        mutate(postcode = as.numeric(postcode_4)) %>%
+        left_join(
+            postal_geo %>% sf::st_drop_geometry() %>% select(postcode, aantal_inwoners),
+            by = "postcode"
+        ) %>%
+        filter(!is.na(aantal_inwoners), aantal_inwoners > 0, institution_students > 0)
+    
+    if (nrow(market_population) > 10) {
+        # Create scatter plot of market share vs population
+        market_population %>%
+            ggplot(aes(x = aantal_inwoners, y = market_share_pct)) +
+            geom_point(aes(size = institution_students), alpha = 0.6, color = "steelblue") +
+            geom_smooth(method = "loess", se = TRUE, color = "red", alpha = 0.3) +
+            scale_x_log10(labels = scales::comma) +
+            scale_size_continuous(name = "Studenten", range = c(2, 10)) +
+            theme_minimal() +
+            labs(
+                title = paste("Marktaandeel vs Bevolkingsdichtheid -", params$school_name),
+                subtitle = paste("Schooljaar", recent_year, "- Grootte punt = aantal studenten"),
+                x = "Aantal Inwoners per Postcode (log schaal)",
+                y = "Marktaandeel (%)",
+                caption = "Trend lijn toont gemiddelde relatie tussen bevolking en marktaandeel"
+            )
+        
+        cat("\n### Analyse Marktaandeel vs Bevolking\n\n")
+        
+        # Calculate correlation
+        correlation <- cor(log10(market_population$aantal_inwoners), 
+                          market_population$market_share_pct, 
+                          use = "complete.obs")
+        
+        cat("**Correlatie tussen log(bevolking) en marktaandeel:**", round(correlation, 3), "\n\n")
+        
+        # Find outliers - high market share in small populations
+        high_efficiency <- market_population %>%
+            filter(market_share_pct > 25, aantal_inwoners < 5000) %>%
+            arrange(desc(market_share_pct)) %>%
+            head(5)
+        
+        if (nrow(high_efficiency) > 0) {
+            cat("**Hoog marktaandeel in kleine gebieden:**\n")
+            for (i in 1:nrow(high_efficiency)) {
+                cat("-", high_efficiency$postcode_4[i], 
+                    "(", high_efficiency$market_share_pct[i], "% marktaandeel,", 
+                    scales::comma(high_efficiency$aantal_inwoners[i]), "inwoners)\n")
+            }
+        }
+        
+    } else {
+        cat("Onvoldoende data voor marktaandeel vs bevolking analyse.\n")
+    }
+} else {
+    cat("Geografische data niet beschikbaar voor populatie analyse.\n")
+}
+
+```
+
+```{r}
+#| label: geographic-insights
+
+# Generate geographic insights
+cat("### Geografische Inzichten\n\n")
+
+if (nrow(market_share_data) > 0) {
+    # Calculate key metrics
+    total_postcodes_with_students <- sum(market_share_data$institution_students > 0)
+    high_share_postcodes <- sum(market_share_data$market_share_pct > 25, na.rm = TRUE)
+    dominant_postcodes <- sum(market_share_data$market_share_pct > 50, na.rm = TRUE)
+    
+    # Most recent year stats
+    recent_year <- max(market_share_data$schooljaar)
+    recent_data <- market_share_data %>% filter(schooljaar == recent_year)
+    
+    cat("**Geografische Spreiding (", recent_year, "):**\n")
+    cat("- Postcodes met studenten:", sum(recent_data$institution_students > 0), "\n")
+    cat("- Postcodes met >25% marktaandeel:", sum(recent_data$market_share_pct > 25, na.rm = TRUE), "\n")
+    cat("- Postcodes met >50% marktaandeel:", sum(recent_data$market_share_pct > 50, na.rm = TRUE), "\n")
+    
+    # Top postcode
+    top_postcode <- recent_data %>%
+        filter(institution_students == max(institution_students)) %>%
+        slice(1)
+    
+    if (nrow(top_postcode) > 0) {
+        cat("- Belangrijkste postcode:", top_postcode$postcode_4, 
+            "(", top_postcode$institution_students, "studenten,", 
+            round(top_postcode$market_share_pct, 1), "% marktaandeel)\n")
+    }
+    
+    cat("\n**Strategische Kansen:**\n")
+    
+    # Find high-volume, low-share postcodes (opportunities)
+    opportunities <- recent_data %>%
+        filter(total_students >= 10, market_share_pct < 20, market_share_pct > 0) %>%
+        arrange(desc(total_students)) %>%
+        head(5)
+    
+    if (nrow(opportunities) > 0) {
+        cat("- Groeikansen in postcodes met veel MBO-studenten maar laag marktaandeel:\n")
+        for (i in 1:nrow(opportunities)) {
+            cat("  -", opportunities$postcode_4[i], 
+                "(", opportunities$total_students[i], "totaal studenten,", 
+                round(opportunities$market_share_pct[i], 1), "% marktaandeel)\n")
+        }
+    }
+} else {
+    cat("Onvoldoende data voor geografische analyse.\n")
 }
 
 ```
