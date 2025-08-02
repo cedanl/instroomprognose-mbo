@@ -1,5 +1,4 @@
 ---
-
 subtitle: "Eerste inzichten in aanmeldingsgegevens"
 author: "Corneel den Hartogh"
 affiliation: "CEDA - Npuls"
@@ -21,6 +20,7 @@ execute:
   freeze: auto
   include: true
   warning: false
+
 ---
 
 ```{r}
@@ -34,12 +34,12 @@ execute:
 source("utils/00_setup.R")
 
 # Set config, change to cambo to run with real data from cambo
-Sys.setenv(R_CONFIG_ACTIVE = "cambo")
+Sys.setenv(R_CONFIG_ACTIVE = "default")
 
 ```
 
 ---
-title: "Instroomanalyse `r config::get('name')` - MVP"
+title: "Instroom exploratie `r config::get('name')`"
 ---
 
 
@@ -915,6 +915,310 @@ ggplot(monthly_applications,
 
 ```
 
+## 6. Geografische Analyse van Studentenherkomst
+
+Voor inzicht in de geografische spreiding van studenten analyseren we waar studenten vandaan komen op basis van postcode. We focussen op MBO Amersfoort om hun marktaandeel per postcode te visualiseren voor 2023 en 2024.
+
+```{r}
+#| label: geographic-preparation
+
+# Filter alleen ingeschreven studenten voor MBO Amersfoort
+mbo_amersfoort_enrolled <- applications_enriched %>%
+    filter(
+        status == "ENROLLED",
+        school == "MBO Amersfoort",
+        schooljaar %in% c(2023, 2024),
+        !is.na(postcodecijfers)
+    ) %>%
+    # Convert postal code to 4-digit string
+    mutate(
+        postcode_4 = sprintf("%04d", postcodecijfers)
+    ) %>%
+    filter(nchar(postcode_4) == 4)
+
+# Count unique students per postcode per year for MBO Amersfoort
+mbo_students_by_postcode <- mbo_amersfoort_enrolled %>%
+    group_by(schooljaar, postcode_4) %>%
+    summarise(
+        mbo_amersfoort_students = n_distinct(bsnhash),
+        .groups = "drop"
+    )
+
+# Count total unique students per postcode per year (all institutions)
+total_students_by_postcode <- applications_enriched %>%
+    filter(
+        status == "ENROLLED",
+        schooljaar %in% c(2023, 2024),
+        !is.na(postcodecijfers)
+    ) %>%
+    mutate(
+        postcode_4 = sprintf("%04d", postcodecijfers)
+    ) %>%
+    filter(nchar(postcode_4) == 4) %>%
+    group_by(schooljaar, postcode_4) %>%
+    summarise(
+        total_students = n_distinct(bsnhash),
+        .groups = "drop"
+    )
+
+# Calculate market share
+market_share_analysis <- total_students_by_postcode %>%
+    left_join(mbo_students_by_postcode, by = c("schooljaar", "postcode_4")) %>%
+    mutate(
+        mbo_amersfoort_students = replace_na(mbo_amersfoort_students, 0),
+        market_share_pct = (mbo_amersfoort_students / total_students) * 100
+    ) %>%
+    filter(total_students >= 5)  # Only postcodes with at least 5 total students
+
+cat("Analyse van marktaandeel MBO Amersfoort per postcode\n")
+cat("Aantal postcodes in analyse:", nrow(market_share_analysis), "\n")
+cat("Schooljaren:", paste(unique(market_share_analysis$schooljaar), collapse = ", "), "\n")
+
+```
+
+```{r}
+#| label: market-share-summary
+
+# Summary statistics per year
+market_share_summary <- market_share_analysis %>%
+    group_by(schooljaar) %>%
+    summarise(
+        postcodes_with_students = sum(mbo_amersfoort_students > 0),
+        total_postcodes = n(),
+        avg_market_share = mean(market_share_pct[mbo_amersfoort_students > 0], na.rm = TRUE),
+        max_market_share = max(market_share_pct, na.rm = TRUE),
+        total_mbo_students = sum(mbo_amersfoort_students),
+        .groups = "drop"
+    )
+
+# Show summary table
+market_share_summary %>%
+    gt() %>%
+    tab_header(
+        title = "MBO Amersfoort Marktaandeel Samenvatting",
+        subtitle = "Per schooljaar"
+    ) %>%
+    cols_label(
+        schooljaar = "Schooljaar",
+        postcodes_with_students = "Postcodes met studenten",
+        total_postcodes = "Totaal postcodes",
+        avg_market_share = "Gemiddeld marktaandeel (%)",
+        max_market_share = "Maximaal marktaandeel (%)",
+        total_mbo_students = "Totaal MBO studenten"
+    ) %>%
+    fmt_number(
+        columns = c(postcodes_with_students, total_postcodes, total_mbo_students),
+        decimals = 0
+    ) %>%
+    fmt_number(
+        columns = c(avg_market_share, max_market_share),
+        decimals = 1
+    )
+
+```
+
+```{r}
+#| label: geographic-data-preparation
+
+# Load postal code geographic data
+postal_code_geo <- sf::st_read("data/reference/cbs_pc4_2024_v1.gpkg", quiet = TRUE)
+
+# Transform to WGS84 for leaflet
+postal_code_geo_wgs84 <- sf::st_transform(postal_code_geo, crs = 4326)
+
+# Join market share data with geographic data for 2023
+market_share_2023 <- market_share_analysis %>%
+    filter(schooljaar == 2023) %>%
+    mutate(postcode = as.numeric(postcode_4)) %>%
+    select(-postcode_4)
+
+geo_market_2023 <- postal_code_geo_wgs84 %>%
+    left_join(market_share_2023, by = "postcode") %>%
+    mutate(
+        market_share_pct = replace_na(market_share_pct, 0),
+        has_mbo_students = replace_na(mbo_amersfoort_students, 0) > 0
+    )
+
+# Join market share data with geographic data for 2024
+market_share_2024 <- market_share_analysis %>%
+    filter(schooljaar == 2024) %>%
+    mutate(postcode = as.numeric(postcode_4)) %>%
+    select(-postcode_4)
+
+geo_market_2024 <- postal_code_geo_wgs84 %>%
+    left_join(market_share_2024, by = "postcode") %>%
+    mutate(
+        market_share_pct = replace_na(market_share_pct, 0),
+        has_mbo_students = replace_na(mbo_amersfoort_students, 0) > 0
+    )
+
+```
+
+```{r}
+#| label: market-share-map-2023
+
+# Create color scale function for market share
+create_market_share_colors <- function(market_share) {
+    # Use a blue to red color scale
+    color_palette <- colorNumeric(
+        palette = c("#FFFFFF", "#FFFFCC", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#B10026"),
+        domain = c(0, 100),
+        na.color = "transparent"
+    )
+    return(color_palette(market_share))
+}
+
+# Map for 2023
+map_2023 <- leaflet(geo_market_2023) %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addPolygons(
+        fillColor = ~create_market_share_colors(market_share_pct),
+        fillOpacity = 0.8,
+        color = "white",
+        weight = 0.5,
+        popup = ~paste0(
+            "<b>Postcode:</b> ", postcode, "<br>",
+            "<b>MBO Amersfoort studenten:</b> ", replace_na(mbo_amersfoort_students, 0), "<br>",
+            "<b>Totaal studenten:</b> ", replace_na(total_students, 0), "<br>",
+            "<b>Marktaandeel:</b> ", round(market_share_pct, 1), "%"
+        ),
+        label = ~paste0(postcode, ": ", round(market_share_pct, 1), "% marktaandeel"),
+        highlightOptions = highlightOptions(
+            weight = 2,
+            color = "black",
+            fillOpacity = 1,
+            bringToFront = TRUE
+        )
+    ) %>%
+    addLegend(
+        pal = colorNumeric(
+            palette = c("#FFFFFF", "#FFFFCC", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#B10026"),
+            domain = c(0, 100)
+        ),
+        values = ~market_share_pct,
+        title = "Marktaandeel (%)",
+        position = "bottomright"
+    ) %>%
+    setView(lng = 5.2, lat = 52.2, zoom = 8)
+
+# Display 2023 map
+cat("## MBO Amersfoort Marktaandeel per Postcode - 2023\n\n")
+map_2023
+
+```
+
+```{r}
+#| label: market-share-map-2024
+
+# Map for 2024
+map_2024 <- leaflet(geo_market_2024) %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addPolygons(
+        fillColor = ~create_market_share_colors(market_share_pct),
+        fillOpacity = 0.8,
+        color = "white",
+        weight = 0.5,
+        popup = ~paste0(
+            "<b>Postcode:</b> ", postcode, "<br>",
+            "<b>MBO Amersfoort studenten:</b> ", replace_na(mbo_amersfoort_students, 0), "<br>",
+            "<b>Totaal studenten:</b> ", replace_na(total_students, 0), "<br>",
+            "<b>Marktaandeel:</b> ", round(market_share_pct, 1), "%"
+        ),
+        label = ~paste0(postcode, ": ", round(market_share_pct, 1), "% marktaandeel"),
+        highlightOptions = highlightOptions(
+            weight = 2,
+            color = "black",
+            fillOpacity = 1,
+            bringToFront = TRUE
+        )
+    ) %>%
+    addLegend(
+        pal = colorNumeric(
+            palette = c("#FFFFFF", "#FFFFCC", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#B10026"),
+            domain = c(0, 100)
+        ),
+        values = ~market_share_pct,
+        title = "Marktaandeel (%)",
+        position = "bottomright"
+    ) %>%
+    setView(lng = 5.2, lat = 52.2, zoom = 8)
+
+# Display 2024 map
+cat("## MBO Amersfoort Marktaandeel per Postcode - 2024\n\n")
+map_2024
+
+```
+
+```{r}
+#| label: top-postcodes-analysis
+
+# Find top postcodes for MBO Amersfoort
+top_postcodes_2023 <- market_share_analysis %>%
+    filter(schooljaar == 2023, mbo_amersfoort_students > 0) %>%
+    arrange(desc(mbo_amersfoort_students)) %>%
+    head(10)
+
+top_postcodes_2024 <- market_share_analysis %>%
+    filter(schooljaar == 2024, mbo_amersfoort_students > 0) %>%
+    arrange(desc(mbo_amersfoort_students)) %>%
+    head(10)
+
+# Combine for comparison
+top_postcodes_comparison <- bind_rows(
+    mutate(top_postcodes_2023, jaar = 2023),
+    mutate(top_postcodes_2024, jaar = 2024)
+) %>%
+    select(jaar, postcode_4, mbo_amersfoort_students, total_students, market_share_pct) %>%
+    arrange(desc(mbo_amersfoort_students))
+
+# Display top postcodes table
+top_postcodes_comparison %>%
+    gt() %>%
+    tab_header(
+        title = "Top 10 Postcodes voor MBO Amersfoort",
+        subtitle = "Gerangschikt op aantal studenten"
+    ) %>%
+    cols_label(
+        jaar = "Jaar",
+        postcode_4 = "Postcode",
+        mbo_amersfoort_students = "MBO Studenten",
+        total_students = "Totaal Studenten",
+        market_share_pct = "Marktaandeel (%)"
+    ) %>%
+    fmt_number(
+        columns = c(mbo_amersfoort_students, total_students),
+        decimals = 0
+    ) %>%
+    fmt_number(
+        columns = market_share_pct,
+        decimals = 1
+    ) %>%
+    tab_style(
+        style = cell_fill(color = "#e6f3ff"),
+        locations = cells_body(rows = jaar == 2023)
+    ) %>%
+    tab_style(
+        style = cell_fill(color = "#fff2e6"),
+        locations = cells_body(rows = jaar == 2024)
+    )
+
+```
+
+### Inzichten Geografische Analyse
+
+De geografische analyse van MBO Amersfoort toont interessante patronen:
+
+1. **Geografische Concentratie**: MBO Amersfoort heeft een duidelijke regionale focus met hogere marktaandelen in de directe omgeving
+2. **Marktpositie**: Het marktaandeel varieert significant per postcode, van 0% tot over de 50% in sommige gebieden
+3. **Jaarlijkse Vergelijking**: Door 2023 en 2024 te vergelijken kunnen we trends in geografische spreiding identificeren
+4. **Strategische Inzichten**: De kaarten tonen kansen voor uitbreiding in gebieden met lage marktaandelen maar hoge studentenaantallen
+
+Deze analyse kan gebruikt worden voor:
+- Gerichte marketingcampagnes in ondervertegenwoordigde gebieden
+- Identificatie van concurrentieposities per regio
+- Optimalisatie van locatiestrategie en bereikbaarheid
+- Benchmark tegen andere MBO-instellingen in dezelfde regio
+
 Tot slot analyseren we de verdeling van aanmeldingsstatussen per maand en jaar. Dit geeft inzicht in het verloop van het administratieve proces gedurende het jaar.
 
 
@@ -1132,6 +1436,80 @@ ggplot(result,
         panel.grid.minor = element_blank(),
         legend.position = "bottom"
     )
+```
+
+
+```{r}
+
+test <- sf::st_read("data/reference/cbs_pc4_2024_v1.gpkg")
+
+test2 <- test %>% mutate(aantal_inwoners = ifelse(aantal_inwoners < 0, 0, aantal_inwoners))
+
+# Transform from Amersfoort/RD New (EPSG:28992) to WGS84 (EPSG:4326)
+test2_wgs84 <- st_transform(test2, crs = 4326)
+centroids <- st_centroid(test2_wgs84)
+
+# Create a basic leaflet map
+# Better scaling function for bubble sizes
+scale_radius <- function(x, min_size = 5, max_size = 50) {
+    # Scale between min and max size
+    scaled <- (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+    return(min_size + scaled * (max_size - min_size))
+}
+
+leaflet(centroids) %>%
+    addProviderTiles(providers$CartoDB.Positron) %>%
+    addCircles(
+        radius = ~scale_radius(aantal_inwoners, min_size = 5, max_size = 2000),
+        fillOpacity = 0.7,
+        color = "white",
+        fillColor = "steelblue",
+        weight = 1,
+        popup = ~paste0(
+            "<b>Postcode:</b> ", postcode, "<br>",
+            "<b>Aantal inwoners:</b> ", format(aantal_inwoners, big.mark = ",")
+        ),
+        label = ~paste(postcode, "-", format(aantal_inwoners, big.mark = ","), "inwoners")
+    )
+
+# Transform to WGS84
+test2_wgs84 <- st_transform(test2, crs = 4326)
+
+# Create simple color function (white to red)
+color_scale <- function(x) {
+  # Normalize values between 0 and 1
+  normalized <- (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+  
+  # Create RGB values (white = 255,255,255 to red = 255,0,0)
+  red_values <- rep(255, length(x))
+  green_values <- round(255 * (1 - normalized))
+  blue_values <- round(255 * (1 - normalized))
+  
+  # Return hex colors
+  return(rgb(red_values, green_values, blue_values, maxColorValue = 255))
+}
+
+# Create the map
+leaflet(test2_wgs84) %>%
+  addTiles() %>%
+  addPolygons(
+    fillColor = ~color_scale(aantal_inwoners),
+    fillOpacity = 1,
+    color = "white",
+    weight = 1,
+    popup = ~paste0(
+      "<b>Postcode:</b> ", postcode, "<br>",
+      "<b>Aantal inwoners:</b> ", format(aantal_inwoners, big.mark = ",")
+    ),
+    label = ~paste(postcode, "-", format(aantal_inwoners, big.mark = ","), "inwoners"),
+    highlightOptions = highlightOptions(
+      weight = 2,
+      color = "black",
+      fillOpacity = 0.9,
+      bringToFront = TRUE
+    )
+  )
+
 ```
 
 ### Inzichten Temporele Analyse

@@ -32,7 +32,8 @@ execute:
 
 # Load required libraries
 source("utils/00_setup.R")
-
+# Set config, change to cambo to run with real data from cambo
+Sys.setenv(R_CONFIG_ACTIVE = "cambo")
 ```
 
 ## 1. Data inladen & toevoegen
@@ -222,7 +223,18 @@ applications_with_conclusion <- applications_with_derived %>%
       schooljaar_afgeleid_created > schooljaar ~ schooljaar_afgeleid_created,
       .default = schooljaar
     )
-  )
+  ) %>%
+ # Verwijder rijen met missende waarden in essentiële velden
+ filter(!is.na(status), !is.na(begindatum)) %>%
+ # Creëer een unieke case_id (student + opleiding + instelling)
+ mutate(
+   case_id = paste(ketenid, bsnhash, schooljaar_afgeleid, opleidingcode, instellingserkenningscode, onderwijslocatiecode, sep = "_")
+ )
+```
+
+
+```{r}
+#| label: schooljaar-comparison-analysis
 
 test <- applications_with_conclusion |>
   mutate(veranderd = schooljaar != schooljaar_afgeleid) |>
@@ -280,6 +292,7 @@ ggplot(schooljaar_comparison, aes(x = factor(schooljaar_afgeleid), y = aantal, f
 #### 2.2.2. Nieuwe rijen toevoegen
 
 ```{r}
+#| label: define-closure-function
 
 add_process_closure_events <- function(process_data) {
   
@@ -378,15 +391,11 @@ add_process_closure_events <- function(process_data) {
 
 
 ```{r}
+#| label: apply-closure-events
+#| cache: false
 
 # Bestaande preparatie code...
 applications_prepare_expansion <- applications_with_conclusion %>%
- # Verwijder rijen met missende waarden in essentiële velden
- filter(!is.na(status), !is.na(begindatum)) %>%
- # Creëer een unieke case_id (student + opleiding + instelling)
- mutate(
-   case_id = paste(ketenid, bsnhash, schooljaar_afgeleid, opleidingcode, instellingserkenningscode, onderwijslocatiecode, sep = "_")
- ) %>%
   group_by(case_id) %>%
   mutate(complete = lead(begindatum),
          status_towards = lead(status))
@@ -415,6 +424,7 @@ applications_expanded <- closure_result$data
 #### 2.3.1. Afgeleid schooljaar
 
 ```{r}
+#| label: yearly-metrics-analysis
 yearly_metrics_afgeleid <- applications_with_conclusion %>%
   group_by(schooljaar_afgeleid) %>%
   summarise(
@@ -454,6 +464,7 @@ We zien dat alle waardes 0 zijn omgezet naar naar daadwerkelijke jaren. Ook zien
 Toon hoeveel events toegevoegd zijn
 
 ```{r}
+#| label: show-added-events
 
 closure_result$added_events %>%
   knitr::kable(caption = "Toegevoegde WITHDRAWN events voor process closure")
@@ -464,64 +475,124 @@ closure_result$added_events %>%
 
 Bij een administratief proces is de data-kwaliteit de proces-kwaliteit. Door met process mining een zogenoemde procesmap maken, krijgen we een indruk van de procesrkwaliteit.
 
-### Preparatie
+We maken drie verschillende analyses om de impact van verschillende data-keuzes te vergelijken:
+
+1. **Origineel**: `applications_with_conclusion` met originele `schooljaar`
+2. **Afgeleid schooljaar**: `applications_with_conclusion` met `schooljaar_afgeleid`  
+3. **Aanvullende rijen**: `applications_expanded` met `schooljaar_afgeleid`
+
+### Preparatie data varianten
 
 ```{r}
 #| label: process-mining-setup
-# Voorbereiden van de data voor process mining
-process_data <- applications_with_conclusion %>%
- # Selecteer alleen relevante kolommen
- select(
-   bsnhash,                    # Student identifier
-   ketenid,                    # Case identifier
-   status,                     # Activity name
-   begindatum,        # Date of activity begindatum is timestamp (dttm)
-   opleidingcode,              # Secondary case identifier
-   instellingserkenningscode,  # Secondary case identifier
-   onderwijslocatiecode,       # Secondary case identifier
-   schooljaar_afgeleid,        # Secondary case identifier
-   case_id
- ) %>%
- # Hernoem kolommen naar standaard bupaR structuur
- rename(
-   activity = status,
-   start = begindatum,
- )
+# Functie om proces data voor te bereiden
+prepare_process_data <- function(data, schooljaar_var = "schooljaar_afgeleid") {
+  
+  # Maak case_id op basis van gekozen schooljaar variabele
+  if (schooljaar_var == "schooljaar") {
+    data <- data %>%
+      mutate(case_id_temp = paste(ketenid, bsnhash, schooljaar, opleidingcode, 
+                                  instellingserkenningscode, onderwijslocatiecode, sep = "_"))
+  } else {
+    data <- data %>%
+      mutate(case_id_temp = case_id)  # Gebruik bestaande case_id
+  }
+  
+  # Selecteer en hernoem kolommen
+  data %>%
+    select(
+      bsnhash,
+      ketenid,
+      status,
+      begindatum,
+      opleidingcode,
+      instellingserkenningscode,
+      onderwijslocatiecode,
+      schooljaar_var = all_of(schooljaar_var),
+      case_id = case_id_temp
+    ) %>%
+    rename(
+      activity = status,
+      start = begindatum
+    )
+}
+
+# Prepareer de drie varianten
+process_data_origineel <- prepare_process_data(applications_with_conclusion, "schooljaar")
+process_data_afgeleid <- prepare_process_data(applications_with_conclusion, "schooljaar_afgeleid")
+process_data_aanvullend <- prepare_process_data(applications_expanded, "schooljaar_afgeleid")
 ```
 
-Voor het maken van een proces map zoomen we in op één instelling: MBO Amersfoort (30RR).
+### Vergelijking van datasets
+
+Laten we eerst kijken naar de verschillen tussen de drie datasets:
 
 ```{r}
-#| label: process-mining
-# Converteer naar bupaR eventlog formaat
+#| label: dataset-comparison
+# Vergelijk aantal cases en activiteiten per dataset
+dataset_stats <- tibble(
+  Dataset = c("Origineel schooljaar", "Afgeleid schooljaar", "Aanvullende rijen"),
+  `Aantal cases` = c(
+    n_distinct(process_data_origineel$case_id), 
+    n_distinct(process_data_afgeleid$case_id),
+    n_distinct(process_data_aanvullend$case_id)
+  ),
+  `Aantal activiteiten` = c(
+    nrow(process_data_origineel),
+    nrow(process_data_afgeleid),
+    nrow(process_data_aanvullend)
+  ),
+  `Gemiddeld per case` = round(`Aantal activiteiten` / `Aantal cases`, 2)
+)
 
-process_data_mboa <- process_data %>%
-  filter(instellingserkenningscode == "30RR") %>%
-  group_by(case_id) %>%
-  mutate(complete = lead(start),
-         activity_towards = lead(activity))
+knitr::kable(dataset_stats, caption = "Vergelijking van datasets voor process mining")
+```
 
-log <- process_data_mboa %>%
-  convert_timestamps(c("start", "complete"), format = ymd_hms) |>
-  activitylog(
-   case_id = "case_id",
-   activity_id = "activity", 
-   timestamps = c("start", "complete"),
-   resource_id = "instellingserkenningscode",
-   order = "auto"
- )
+### Process mining per variant
 
+Voor het maken van proces maps zoomen we in op één instelling: MBO Amersfoort (30RR).
+
+```{r}
+#| label: process-mining-eventlogs
+# Functie om eventlog te maken per variant
+create_eventlog <- function(process_data, variant_name) {
+  
+  process_data_mboa <- process_data %>%
+    filter(instellingserkenningscode == "30RR") %>%
+    group_by(case_id) %>%
+    mutate(complete = lead(start),
+           activity_towards = lead(activity))
+  
+  log <- process_data_mboa %>%
+    convert_timestamps(c("start", "complete"), format = ymd_hms) %>%
+    activitylog(
+      case_id = "case_id",
+      activity_id = "activity", 
+      timestamps = c("start", "complete"),
+      resource_id = "instellingserkenningscode",
+      order = "auto"
+    )
+  
+  return(log)
+}
+
+# Maak eventlogs voor alle drie varianten
+log_origineel <- create_eventlog(process_data_origineel, "origineel")
+log_afgeleid <- create_eventlog(process_data_afgeleid, "afgeleid")
+log_aanvullend <- create_eventlog(process_data_aanvullend, "aanvullend")
 ```
  
 
-### Proces map
+### Proces maps - Vergelijking van varianten
 
-Nu maken we 2 zogenoemde proces mappen. De eerste map heeft alle mogelijke status veranderingen, de tweede map selecteert alleen veranderingen als ze meer dan 5% van de gevallen voorkomen.
+Nu maken we proces maps voor alle drie varianten om de verschillen te kunnen vergelijken.
+
+#### 3.1 Origineel schooljaar variant (applications_with_conclusion + schooljaar)
 
 ```{r}
-#| label: process-mining-visualisation
-process_map_full <- process_map(
-  log, #type = frequency(value = "absolute", color_edges = "steelblue"), 
+#| label: process-map-origineel
+process_map_origineel <- process_map(
+  log_origineel,
   layout = layout_pm(edge_weight = TRUE, edge_cutoff = 1), 
   rankdir = "TB", 
   type_nodes = frequency("relative_case"), 
@@ -529,52 +600,138 @@ process_map_full <- process_map(
   render = FALSE
 )
 
-
 if (knitr::is_html_output() | interactive()) {
-  #DiagrammeR::render_graph(process_map_full)
-  processmapR::render_map(process_map_full)
+  processmapR::render_map(process_map_origineel)
 } else {
-  # For PDF output, export and include
-  map_file <- "data_kwaliteit_files/figure-pdf/process-mining-full.pdf"
-  processmapR::export_map(process_map_full, file_name = map_file)
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-origineel.pdf"
+  processmapR::export_map(process_map_origineel, file_name = map_file)
   knitr::include_graphics(map_file)
 }
-
 ```
 
-We zien naast de standaard flow (submitted -> received -> offered -> enrolled) ook veel andere flows. Dit zijn vaak flows die niet meer dan 5% van de gevallen bevatten.
-
-Voor iets meer overzicht, kijken we daarom naar de flows die meer dan 5% van de gevallen bevatten. Dit betekent dat we alleen statusveranderingen opnemen die bij 5% of meer van de aanmeldingen voorkomen. Een aanmelding is dan een student bij een specifieke opleiding bij een specifieke instelling in een specifiek jaar.
+#### 3.2 Afgeleid schooljaar variant (applications_with_conclusion + schooljaar_afgeleid)
 
 ```{r}
-#| label: process-mining-filtered
+#| label: process-map-afgeleid
+process_map_afgeleid <- process_map(
+  log_afgeleid,
+  layout = layout_pm(edge_weight = TRUE, edge_cutoff = 1), 
+  rankdir = "TB", 
+  type_nodes = frequency("relative_case"), 
+  type_edges = frequency("relative_case"), 
+  render = FALSE
+)
 
-edges_to_remove <- process_map_full %>%
-  processmapR::get_flows() %>%
-  dplyr::filter(value < 0.05) %>%
-  transmute(from = from_id, to = to_id)
-
-edges_ids_to_remove <- process_map_full %>%
-  DiagrammeR::get_edge_df() %>%
-  as_tibble() %>%
-  semi_join(edges_to_remove, by = c("from", "to")) %>%
-  pull(id)
-
-process_map_filtered <- process_map_full %>%
-  DiagrammeR::select_edges_by_edge_id(edges = edges_ids_to_remove) %>%
-  DiagrammeR::delete_edges_ws() %>%
-  DiagrammeR::select_nodes_by_degree("deg == 0") %>%
-  DiagrammeR::delete_nodes_ws()
-
-# Conditional rendering based on output format
 if (knitr::is_html_output() | interactive()) {
-  processmapR::render_map(process_map_filtered)
+  processmapR::render_map(process_map_afgeleid)
 } else {
-  # For PDF output, export and include
-  map_file <- "data_kwaliteit_files/figure-pdf/process-mining-filtered.pdf"
-  processmapR::export_map(process_map_filtered, file_name = map_file)
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-afgeleid.pdf"
+  processmapR::export_map(process_map_afgeleid, file_name = map_file)
   knitr::include_graphics(map_file)
 }
 ```
 
-De standaard flow, van submitted -> received -> offered -> enrolled is de meest voorkomende flow. Ook withdrawn als status komt vaak voor. De percentages zijn het aantal aanmeldcases waarin de statusverandering (lijnen) of de status (knooppunt) voorkomt.
+#### 3.3 Aanvullende rijen variant (applications_expanded + schooljaar_afgeleid)
+
+```{r}
+#| label: process-map-aanvullend
+process_map_aanvullend <- process_map(
+  log_aanvullend,
+  layout = layout_pm(edge_weight = TRUE, edge_cutoff = 1), 
+  rankdir = "TB", 
+  type_nodes = frequency("relative_case"), 
+  type_edges = frequency("relative_case"), 
+  render = FALSE
+)
+
+if (knitr::is_html_output() | interactive()) {
+  processmapR::render_map(process_map_aanvullend)
+} else {
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-aanvullend.pdf"
+  processmapR::export_map(process_map_aanvullend, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+```
+
+### Gefilterde proces maps (>5% flows)
+
+We zien naast de standaard flow (submitted -> received -> offered -> enrolled) ook veel andere flows. Voor overzicht filteren we op flows die meer dan 5% van de gevallen bevatten.
+
+```{r}
+#| label: process-maps-filtered
+# Functie om proces map te filteren op >5% flows
+filter_process_map <- function(process_map, threshold = 0.05) {
+  
+  edges_to_remove <- process_map %>%
+    processmapR::get_flows() %>%
+    dplyr::filter(value < threshold) %>%
+    transmute(from = from_id, to = to_id)
+  
+  edges_ids_to_remove <- process_map %>%
+    DiagrammeR::get_edge_df() %>%
+    as_tibble() %>%
+    semi_join(edges_to_remove, by = c("from", "to")) %>%
+    pull(id)
+  
+  filtered_map <- process_map %>%
+    DiagrammeR::select_edges_by_edge_id(edges = edges_ids_to_remove) %>%
+    DiagrammeR::delete_edges_ws() %>%
+    DiagrammeR::select_nodes_by_degree("deg == 0") %>%
+    DiagrammeR::delete_nodes_ws()
+  
+  return(filtered_map)
+}
+
+# Filter alle drie process maps
+process_map_origineel_filtered <- filter_process_map(process_map_origineel)
+process_map_afgeleid_filtered <- filter_process_map(process_map_afgeleid)
+process_map_aanvullend_filtered <- filter_process_map(process_map_aanvullend)
+```
+
+#### 3.4 Vergelijking gefilterde maps
+
+**Origineel schooljaar variant (gefilterd):**
+```{r}
+#| label: origineel-filtered
+if (knitr::is_html_output() | interactive()) {
+  processmapR::render_map(process_map_origineel_filtered)
+} else {
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-origineel-filtered.pdf"
+  processmapR::export_map(process_map_origineel_filtered, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+```
+
+**Afgeleid schooljaar variant (gefilterd):**
+```{r}
+#| label: afgeleid-filtered
+if (knitr::is_html_output() | interactive()) {
+  processmapR::render_map(process_map_afgeleid_filtered)
+} else {
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-afgeleid-filtered.pdf"
+  processmapR::export_map(process_map_afgeleid_filtered, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+```
+
+**Aanvullende rijen variant (gefilterd):**
+```{r}
+#| label: aanvullend-filtered
+if (knitr::is_html_output() | interactive()) {
+  processmapR::render_map(process_map_aanvullend_filtered)
+} else {
+  map_file <- "data_kwaliteit_files/figure-pdf/process-map-aanvullend-filtered.pdf"
+  processmapR::export_map(process_map_aanvullend_filtered, file_name = map_file)
+  knitr::include_graphics(map_file)
+}
+```
+
+### Samenvatting proces mining verschillen
+
+De drie varianten laten verschillende aspecten van het proces zien:
+
+- **Origineel schooljaar**: Behoudt oorspronkelijke data maar met inconsistenties (schooljaar=0)
+- **Afgeleid schooljaar**: Gebruikt afgeleide schooljaren voor consistente case definitie  
+- **Aanvullende rijen**: Voegt extra WITHDRAWN events toe voor proces-completheid
+
+De standaard flow (submitted → received → offered → enrolled) is zichtbaar in alle varianten, maar de aanvullende rijen variant toont meer complete proces-afsluitingen.
