@@ -3,6 +3,16 @@
 ## Project Overview
 Test version of the instroomprognose-mbo R package for MBO enrollment forecasting analysis. This package processes synthetic enrollment data and provides forecasting capabilities for educational institutions.
 
+## Key Source Files
+- `R/data_pipeline.R`: Core data processing functions (ingest_*, prepare_*, transform_*, analyze_*)
+- `R/data_quality.R`: Validation and quality assessment functions  
+- `utils/manage_packages.R`: Package loading and dependency management
+- `instroomprognose_prototype.qmd`: Main analysis workflow
+- `data_kwaliteit.qmd`: Data quality assessment report
+- `instelling_analysis.qmd`: Institution-specific analysis template
+- `utils/00_setup.R`: Environment initialization and configuration
+- `config.yml`: Environment-specific settings
+
 ## Commands
 - **Initialize Environment**: `source("utils/00_setup.R")`
 - **Load Packages**: `source("utils/manage_packages.R")`
@@ -47,6 +57,15 @@ Test version of the instroomprognose-mbo R package for MBO enrollment forecastin
 - Use `renv` for dependency management
 - Test functions with synthetic data before real data
 
+## Critical Dependencies
+- `config`: Environment-specific settings via config.yml
+- `renv`: Reproducible package management
+- `devtools`: Package development workflow
+- `quarto`: Report generation and documentation
+- Key data packages: dplyr, readr, lubridate, ggplot2, cli, rlang
+- Visualization: ggplot2, plotly (for interactive plots)
+- Statistical modeling: tidymodels ecosystem
+
 ## Data Configuration
 - Use `config.yml` for environment-specific settings
 - Default configuration uses synthetic data for testing
@@ -77,9 +96,22 @@ Test version of the instroomprognose-mbo R package for MBO enrollment forecastin
   - `test: short description` (for test-related changes)
 - Example: `git commit -m "fix: handle missing enrollment data in forecast model"`
 
+## Project-Specific Gotchas
+- Always use synthetic data for testing; real CAMBO data requires config switch
+- Run `devtools::load_all()` after function changes before Quarto rendering
+- Data validation functions expect specific column names - check schema first
+- Quarto blocks need unique `#| label:` tags to avoid rendering conflicts
+- Institution analysis requires enrollment data from previous 3 years minimum
+- Status transitions analysis can be memory-intensive with large datasets
+- Academic year calculations assume October start (month 10) - configurable via parameters
+- Multiple application analysis requires data grouped with `group_applications(grouping_level = 'full')`
+
 ## Testing Guidelines
 - Use synthetic data for development and testing
 - Validate results against known patterns
 - Test edge cases (missing data, empty datasets, invalid dates)
 - Document expected behavior and assumptions
 - Use `testthat` framework if formal tests are needed
+
+## Claude Read-Up Strategy
+<!-- ALWAYS READ: Start by reading all files in R/ directory to understand current codebase. Also read notebooks/. The notebooks often have the ground truth I tried to move to R/ to work on scale. -->
