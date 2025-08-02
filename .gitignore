@@ -55,8 +55,17 @@ rsconnect/
 !/data/reference/
 !/data/metadata/
 
+# notebook exports - exclude output files but allow .qmd
+/notebooks/*.html
+/notebooks/*.pdf
+/notebooks/*_files/
+/notebooks/*_cache/
+/notebooks/.quarto/
+
+
 # output files
 /output/*
+
 
 # quarto
 /_book/
