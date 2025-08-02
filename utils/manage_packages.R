@@ -45,8 +45,8 @@ packages_cran <- c(
     "ggplot2" ,       # Create plots
     "scales",
     "gt",
-    #"leaflet",
-    #"sf",
+    "leaflet",
+    "sf",
 
     # process mining
     "eventdataR",     # Event data
