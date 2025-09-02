@@ -29,8 +29,7 @@ execute:
 
 # Load pipeline functions
 source("utils/00_setup.R")
-source("R/data_preparation.R")
-source("R/descriptive_analysis.R")
+source("R/data_pipeline.R")
 source("R/data_quality.R")
 
 # Set default params if not available (for testing)
@@ -50,51 +49,17 @@ if (!exists("params")) {
 Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school_name`** (BRIN: `r params$brin_code`) voor de schooljaren `r paste(params$years, collapse = " en ")`.
 
 ```{r}
-#| label: load-data-full-dataset
+#| label: load-and-prepare-data
 #| cache: true
 
-# STAP 1: ALGEMENE ANALYSES OP VOLLEDIGE DATASET
-# Load complete applications data (alle instellingen)
-all_applications <- load_and_enrich_applications(config_env = "default")
+# Load applications data and filter immediately for this institution only
+institution_data <- load_and_enrich_applications(config_env = "cambo") %>%
+  filter_applications_on_brin(params$brin_code)
 
-cat("Volledige dataset geladen voor alle instellingen\n")
-cat("Totaal aantal rijen:", nrow(all_applications), "\n")
-cat("Aantal unieke BRIN codes:", length(unique(all_applications$instellingserkenningscode)), "\n")
-
-```
-
-```{r}
-#| label: general-analysis-multiple-institutions
-#| cache: true
-
-# STAP 2: ANALYSES DIE MEERDERE INSTELLINGEN NODIG HEBBEN
-
-# Group applications op volledig niveau voor meervoudige aanmeldingen analyse
-grouped_all_applications <- group_applications(all_applications, "full")
-
-# Analyseer meervoudige aanmeldingen over alle instellingen
-multiple_applications_analysis <- analyze_multiple_applications(grouped_all_applications)
-
-# Timing analyse over alle instellingen
-timing_analysis_all <- analyze_application_timing(all_applications)
-
-cat("Algemene analyses voltooid op volledige dataset\n")
-cat("Gegroepeerde aanmeldingen (alle instellingen):", nrow(grouped_all_applications), "\n")
-
-```
-
-```{r}
-#| label: filter-institution-data
-#| cache: true
-
-# STAP 3: FILTER VOOR SPECIFIEKE INSTELLING
-# Nu filteren we voor de specifieke instelling
-institution_data <- filter_applications_on_brin(all_applications, brin_codes = params$brin_code)
-
-# Group applications voor deze instelling
+# Group applications for this institution
 grouped_institution <- group_applications(institution_data, "full")
 
-cat("Data gefilterd voor", params$school_name, "\n")
+cat("Data geladen voor", params$school_name, "\n")
 cat("Aantal rijen voor deze instelling:", nrow(institution_data), "\n")
 cat("Aantal gegroepeerde aanmeldingen:", nrow(grouped_institution), "\n")
 
@@ -404,81 +369,22 @@ cat("\\n**Interpretatie:** Een hoge conversie ratio duidt op een effectief aanme
 
 ```
 
+
 ## 4. Analyse van Aanmeldingspatronen
 
 Deze sectie geeft een diepgaande analyse van hoe studenten zich aanmelden bij `r params$school_name`. We analyseren zowel studenten met één aanmelding als studenten met meerdere aanmeldingen om patronen en trends te identificeren.
 
-### 4.1 Algemene Patronen Meervoudige Aanmeldingen
-
-Deze analyse is gebaseerd op **alle instellingen** in de dataset, om context te geven voor de prestaties van `r params$school_name`.
-
 ```{r}
-#| label: general-multiple-applications-overview
+#| label: multiple-applications-analysis
 
-# Gebruik de eerder berekende analyse van het volledige dataset
-if ("conversion_by_pattern" %in% names(multiple_applications_analysis)) {
-  
-  # Show general patterns across all institutions
-  general_pattern_data <- multiple_applications_analysis$conversion_by_pattern %>%
-    mutate(
-      pattern_clean = case_when(
-        str_detect(pattern_type, "één aanmelding|single") ~ "Enkele aanmelding",
-        str_detect(pattern_type, "binnen.*instelling") ~ "Meerdere binnen instelling",
-        str_detect(pattern_type, "tussen.*instelling") ~ "Meerdere tussen instellingen",
-        str_detect(pattern_type, "binnen.*tussen") ~ "Meerdere binnen én tussen",
-        TRUE ~ pattern_type
-      )
-    ) %>%
-    arrange(desc(total))
-  
-  # Show general conversion table for context
-  general_pattern_data %>%
-    select(pattern_clean, total, enrolled, conversion_rate) %>%
-    gt() %>%
-    tab_header(
-      title = "Algemene Conversie per Aanmeldingspatroon",
-      subtitle = "Gegevens van alle instellingen in de dataset voor vergelijking"
-    ) %>%
-    cols_label(
-      pattern_clean = "Aanmeldingspatroon",
-      total = "Totaal Studenten",
-      enrolled = "Aantal Ingeschreven", 
-      conversion_rate = "Conversie %"
-    ) %>%
-    fmt_percent(
-      columns = conversion_rate,
-      decimals = 1,
-      scale_values = FALSE
-    ) %>%
-    data_color(
-      columns = conversion_rate,
-      colors = scales::col_numeric(
-        palette = c("white", "darkgreen"),
-        domain = NULL
-      )
-    )
-    
-} else {
-  cat("Algemene analyse van aanmeldingspatronen niet mogelijk - onvoldoende data.")
-}
-
-```
-
-### 4.2 Institutie-Specifieke Patronen voor `r params$school_name`
-
-Nu kijken we specifiek naar hoe studenten zich gedragen bij `r params$school_name`.
-
-```{r}
-#| label: institution-specific-patterns
-
-# Analyze multiple application patterns for this specific institution
-institution_multiple_patterns <- analyze_multiple_applications(grouped_institution)
+# Analyze multiple application patterns for this institution
+multiple_patterns <- analyze_multiple_applications(grouped_institution)
 
 # Create a flowchart-style visualization of application patterns
-if ("conversion_by_pattern" %in% names(institution_multiple_patterns)) {
+if ("conversion_by_pattern" %in% names(multiple_patterns)) {
   
   # Prepare data for flowchart visualization
-  pattern_data <- institution_multiple_patterns$conversion_by_pattern %>%
+  pattern_data <- multiple_patterns$conversion_by_pattern %>%
     mutate(
       # Ensure we have all categories including single applications
       pattern_clean = case_when(
@@ -491,13 +397,13 @@ if ("conversion_by_pattern" %in% names(institution_multiple_patterns)) {
     ) %>%
     arrange(desc(total))
   
-  # Show the enhanced conversion table for this institution
+  # Show the enhanced conversion table
   pattern_data %>%
     select(pattern_clean, total, enrolled, conversion_rate) %>%
     gt() %>%
     tab_header(
-      title = paste("Conversie per Aanmeldingspatroon -", params$school_name),
-      subtitle = "Instelling-specifieke aanmeldingsstrategieën"
+      title = "Conversie per Aanmeldingspatroon",
+      subtitle = paste("Overzicht van alle aanmeldingsstrategieën -", params$school_name)
     ) %>%
     cols_label(
       pattern_clean = "Aanmeldingspatroon",
@@ -519,12 +425,12 @@ if ("conversion_by_pattern" %in% names(institution_multiple_patterns)) {
     )
     
 } else {
-  cat("Analyse van aanmeldingspatronen niet mogelijk - onvoldoende data voor", params$school_name)
+  cat("Analyse van aanmeldingspatronen niet mogelijk - onvoldoende data.")
 }
 
 ```
 
-### 4.3 Visualisatie Aanmeldingspatronen
+### 4.1 Visualisatie Aanmeldingspatronen
 
 De onderstaande visualisaties tonen de verschillende aanmeldingsstrategieën van studenten en hun effectiviteit. We vergelijken het totale volume van elke strategie met de uiteindelijke inschrijvingen om te zien welke benaderingen het meest succesvol zijn.
 
@@ -590,7 +496,7 @@ if (exists("pattern_data")) {
 
 ```
 
-### 4.4 Verdeling Aantal Aanmeldingen
+### 4.2 Verdeling Aantal Aanmeldingen
 
 Deze analyse toont hoe studenten zich gedragen qua aantal aanmeldingen. Dit is waardevol om te begrijpen:
 - **Volume Perspectief**: Hoeveel studenten kiezen voor elke strategie?
@@ -603,10 +509,10 @@ Deze analyse toont hoe studenten zich gedragen qua aantal aanmeldingen. Dit is w
 #| label: application-count-distribution
 #| fig-height: 6
 
-# Plot distribution of application counts for this institution
-if ("application_count_distribution" %in% names(institution_multiple_patterns)) {
+# Plot distribution of application counts
+if ("application_count_distribution" %in% names(multiple_patterns)) {
   
-  institution_multiple_patterns$application_count_distribution %>%
+  multiple_patterns$application_count_distribution %>%
     filter(applications_total_number <= 6) %>%
     ggplot(aes(x = students_pct, 
                y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)),
@@ -616,7 +522,7 @@ if ("application_count_distribution" %in% names(institution_multiple_patterns)) 
               position = position_dodge(width = 0.9),
               hjust = -0.2, size = 3) +
     scale_fill_brewer(palette = "Set1") +
-    scale_x_continuous(limits = c(0, max(institution_multiple_patterns$application_count_distribution$students_pct) * 1.2)) +
+    scale_x_continuous(limits = c(0, max(multiple_patterns$application_count_distribution$students_pct) * 1.2)) +
     theme_minimal() +
     labs(
       title = paste("Verdeling Aantal Aanmeldingen per Student -", params$school_name),
@@ -636,29 +542,25 @@ if ("application_count_distribution" %in% names(institution_multiple_patterns)) 
 #| label: conversion-by-application-count
 #| fig-height: 6
 
-# Plot conversion rate by application count for this institution
-if ("conversion_by_count" %in% names(institution_multiple_patterns)) {
-  institution_multiple_patterns$conversion_by_count %>%
-    filter(applications_total_number <= 6) %>%
-    ggplot(aes(x = application_conversion_rate,
-               y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)),
-               fill = factor(schooljaar))) +
-    geom_col(position = "dodge") +
-    geom_text(aes(label = paste0(round(application_conversion_rate, 1), "%")), 
-              position = position_dodge(width = 0.9),
-              hjust = -0.2, size = 3) +
-    scale_fill_brewer(palette = "Set1") +
-    theme_minimal() +
-    labs(
-      title = paste("Conversie per Aanmelding naar Aantal Aanmeldingen -", params$school_name),
-      subtitle = "Percentage van aanmeldingen dat resulteert in inschrijving",
-      y = "Aantal Aanmeldingen per Student",
-      x = "Conversie per Aanmelding (%)",
-      fill = "Schooljaar"
-    )
-} else {
-  cat("Data voor conversie per aantal aanmeldingen niet beschikbaar.")
-}
+# Plot conversion rate by application count
+multiple_patterns$conversion_by_count %>%
+  filter(applications_total_number <= 6) %>%
+  ggplot(aes(x = application_conversion_rate,
+             y = reorder(factor(applications_total_number), -as.numeric(applications_total_number)),
+             fill = factor(schooljaar))) +
+  geom_col(position = "dodge") +
+  geom_text(aes(label = paste0(round(application_conversion_rate, 1), "%")), 
+            position = position_dodge(width = 0.9),
+            hjust = -0.2, size = 3) +
+  scale_fill_brewer(palette = "Set1") +
+  theme_minimal() +
+  labs(
+    title = paste("Conversie per Aanmelding naar Aantal Aanmeldingen -", params$school_name),
+    subtitle = "Percentage van aanmeldingen dat resulteert in inschrijving",
+    y = "Aantal Aanmeldingen per Student",
+    x = "Conversie per Aanmelding (%)",
+    fill = "Schooljaar"
+  )
 
 ```
 
@@ -770,6 +672,7 @@ recent_year <- max(params$years)
 status_analysis <- analyze_status_transitions(institution_data, target_year = recent_year)
 
 cat("Analyse van status overgangen voor schooljaar", recent_year, "\n")
+
 
 ```
 
@@ -923,6 +826,7 @@ if (nrow(postcode_data) > 0 && file.exists("data/reference/cbs_pc4_2024_v1.gpkg"
 }
 
 ```
+
 
 ### Top 10 Postcodes 2023
 
@@ -1180,13 +1084,13 @@ if (student_count > 500) {
 }
 
 # Multiple applications conclusion
-if (exists("institution_multiple_patterns") && "conversion_by_pattern" %in% names(institution_multiple_patterns)) {
-  single_app_pct <- institution_multiple_patterns$conversion_by_pattern %>%
+if (exists("multiple_patterns")) {
+  single_app_pct <- multiple_patterns$conversion_by_pattern %>%
     filter(pattern_type == "Slechts één aanmelding") %>%
     pull(conversion_rate) %>%
     mean()
   
-  multiple_app_pct <- institution_multiple_patterns$conversion_by_pattern %>%
+  multiple_app_pct <- multiple_patterns$conversion_by_pattern %>%
     filter(pattern_type != "Slechts één aanmelding") %>%
     pull(conversion_rate) %>%
     mean()
@@ -1206,8 +1110,8 @@ for (conclusion in conclusions) {
 ### Vervolgstappen
 
 1. **Data Kwaliteit**: `r if(quality_summary$overall_quality_score < 80) "Verbeter data invoer processen" else "Handhaaf huidige kwaliteit"`
-2. **Conversie Optimalisatie**: Analyseer succesfactoren en vergelijk met algemene patronen uit de dataset
-3. **Meervoudige Aanmeldingen**: `r if(exists("institution_multiple_patterns")) "Ontwikkel gerichte begeleiding voor studenten met meerdere aanmeldingen" else "Analyseer aanmeldingspatronen"`
+2. **Conversie Optimalisatie**: `r if(exists("conversion_diff") && conversion_diff < 0) "Analyseer succesfactoren van beter presterende instellingen" else "Deel best practices met andere instellingen"`
+3. **Meervoudige Aanmeldingen**: `r if(exists("multiple_patterns")) "Ontwikkel gerichte begeleiding voor studenten met meerdere aanmeldingen" else "Analyseer aanmeldingspatronen"`
 4. **Timing Optimalisatie**: Pas marketingcampagnes aan op basis van seizoenspatronen in aanmeldingen
 5. **Status Transitie**: Optimaliseer administratieve processen voor snellere statuswijzigingen
 6. **Monitoring**: Implementeer maandelijkse monitoring van deze KPI's
