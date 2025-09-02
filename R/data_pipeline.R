@@ -59,29 +59,15 @@ load_and_enrich_applications <- function(config_env = "default") {
 #' @importFrom dplyr filter
 #'
 #' @export
-filter_applications <- function(data,
-                                years = c(2023, 2024),
-                                brin_codes = NULL,
-                                remove_invalid_years = TRUE) {
+filter_applications_on_brin <- function(data,
+                                brin_codes = NULL) {
 
   filtered_data <- data
-
-  # Filter on school years if specified
-  if (!is.null(years)) {
-    filtered_data <- filtered_data %>%
-      filter(schooljaar %in% years)
-  }
 
   # Filter on BRIN codes if specified
   if (!is.null(brin_codes)) {
     filtered_data <- filtered_data %>%
       filter(instellingserkenningscode %in% brin_codes)
-  }
-
-  # Remove invalid school years if requested
-  if (remove_invalid_years) {
-    filtered_data <- filtered_data %>%
-      filter(schooljaar != 0 | is.na(schooljaar))
   }
 
   return(filtered_data)
@@ -591,19 +577,19 @@ build_running_status_counts <- function(new_status_by_week, status_transitions) 
 }
 
 
-#' Calculate market share by postal code for a specific institution
+#' Calculate postcode distribution for a specific institution
 #'
 #' @param data Applications dataset with enrolled students
 #' @param institution_name Name of the institution to analyze
 #' @param years Vector of years to include (default: c(2023, 2024))
-#' @param min_total_students Minimum total students per postcode to include (default: 5)
-#' @return Data frame with market share analysis by postcode
+#' @param min_institution_students Minimum institution students per postcode to include (default: 2)
+#' @return Data frame with postcode distribution analysis
 #'
 #' @importFrom dplyr filter mutate group_by summarise left_join
 #' @importFrom tidyr replace_na
 #'
 #' @export
-calculate_market_share_by_postcode <- function(data, institution_name, years = c(2023, 2024), min_total_students = 5) {
+calculate_market_share_by_postcode <- function(data, institution_name, years = c(2023, 2024), min_institution_students = 2) {
 
     # Validate input data first
     required_cols <- c("status", "school", "schooljaar", "postcodecijfers", "bsnhash")
@@ -650,50 +636,37 @@ calculate_market_share_by_postcode <- function(data, institution_name, years = c
             .groups = "drop"
         )
 
-    # Count total unique students per postcode per year (all institutions)
-    total_by_postcode <- data %>%
-        filter(
-            status == "ENROLLED",
-            schooljaar %in% years,
-            !is.na(postcodecijfers)
-        ) %>%
-        mutate(postcode_4 = sprintf("%04d", as.numeric(postcodecijfers))) %>%
-        filter(nchar(postcode_4) == 4) %>%
-        group_by(schooljaar, postcode_4) %>%
-        summarise(
-            total_students = n_distinct(bsnhash),
-            .groups = "drop"
-        )
+    # Get total institution students per year
+    institution_totals <- institution_by_postcode %>%
+        group_by(schooljaar) %>%
+        summarise(total_institution_students = sum(institution_students), .groups = "drop")
 
-    total_by_postcode <- geo
-
-    # Calculate market share
-    market_share_analysis <- total_by_postcode %>%
-        left_join(institution_by_postcode, by = c("schooljaar", "postcode_4")) %>%
+    # Calculate postcode distribution within institution
+    postcode_distribution_analysis <- institution_by_postcode %>%
+        left_join(institution_totals, by = "schooljaar") %>%
         mutate(
-            institution_students = replace_na(institution_students, 0),
-            market_share_pct = (institution_students / total_students) * 100
+            postcode_percentage = (institution_students / total_institution_students) * 100
         ) %>%
-        filter(total_students >= min_total_students)
+        filter(institution_students >= min_institution_students)
 
     # Validate final output
-    if (nrow(market_share_analysis) == 0) {
-        warning("No postal codes found with minimum ", min_total_students, " students")
+    if (nrow(postcode_distribution_analysis) == 0) {
+        warning("No postal codes found with minimum ", min_institution_students, " students")
         return(data.frame())
     }
 
     # Log summary of results
-    cat("Market share analysis completed for", institution_name, "\n")
-    cat("- Postal codes analyzed:", nrow(market_share_analysis), "\n")
-    cat("- Postal codes with", institution_name, "students:", sum(market_share_analysis$institution_students > 0), "\n")
-    cat("- Years:", paste(unique(market_share_analysis$schooljaar), collapse = ", "), "\n")
+    cat("Postcode distribution analysis completed for", institution_name, "\n")
+    cat("- Postal codes analyzed:", nrow(postcode_distribution_analysis), "\n")
+    cat("- Total", institution_name, "students:", sum(unique(institution_totals$total_institution_students)), "\n")
+    cat("- Years:", paste(unique(postcode_distribution_analysis$schooljaar), collapse = ", "), "\n")
 
-    return(market_share_analysis)
+    return(postcode_distribution_analysis)
 }
 
-#' Create geographic market share visualization
+#' Create geographic postcode distribution visualization
 #'
-#' @param market_share_data Market share data from calculate_market_share_by_postcode
+#' @param postcode_data Postcode distribution data from calculate_market_share_by_postcode
 #' @param geo_data_path Path to geographic data file (GeoPackage format)
 #' @param target_year Year to visualize
 #' @param institution_name Name of institution for labels
@@ -706,50 +679,48 @@ calculate_market_share_by_postcode <- function(data, institution_name, years = c
 #' @importFrom tidyr replace_na
 #'
 #' @export
-create_market_share_map <- function(market_share_data, geo_data_path, target_year, institution_name) {
+create_market_share_map <- function(postcode_data, geo_data_path, target_year, institution_name) {
 
     # Load and transform geographic data
     postal_code_geo <- st_read(geo_data_path, quiet = TRUE)
     postal_code_geo_wgs84 <- st_transform(postal_code_geo, crs = 4326)
 
-    # Filter market share data for target year
-    market_share_year <- market_share_data %>%
+    # Filter postcode data for target year
+    postcode_year <- postcode_data %>%
         filter(schooljaar == target_year) %>%
         mutate(postcode = as.numeric(postcode_4)) %>%
         select(-postcode_4)
 
     # Join with geographic data
-    geo_market <- postal_code_geo_wgs84 %>%
-        left_join(market_share_year, by = "postcode") %>%
+    geo_distribution <- postal_code_geo_wgs84 %>%
+        left_join(postcode_year, by = "postcode") %>%
         mutate(
-            market_share_pct = replace_na(market_share_pct, 0),
-            institution_students = replace_na(institution_students, 0),
-            total_students = aantal_inwoners / 4000,
-            market_share_pct = institution_students / total_students
+            postcode_percentage = replace_na(postcode_percentage, 0),
+            institution_students = replace_na(institution_students, 0)
         )
 
-    # Create color palette
+    # Create color palette with dynamic domain
+    max_percentage <- max(postcode_data$postcode_percentage, na.rm = TRUE)
     color_palette <- colorNumeric(
         palette = c("#FFFFFF", "#FFFFCC", "#FED976", "#FEB24C", "#FD8D3C", "#FC4E2A", "#E31A1C", "#B10026"),
-        domain = c(0, 100),
+        domain = c(0, max_percentage),
         na.color = "transparent"
     )
 
     # Create map
-    map <- leaflet(geo_market) %>%
+    map <- leaflet(geo_distribution) %>%
         addProviderTiles(providers$CartoDB.Positron) %>%
         addPolygons(
-            fillColor = ~color_palette(market_share_pct),
+            fillColor = ~color_palette(postcode_percentage),
             fillOpacity = 0.8,
             color = "white",
             weight = 0.5,
             popup = ~paste0(
                 "<b>Postcode:</b> ", postcode, "<br>",
                 "<b>", institution_name, " studenten:</b> ", institution_students, "<br>",
-                "<b>Totaal studenten:</b> ", total_students, "<br>",
-                "<b>Marktaandeel:</b> ", round(market_share_pct, 1), "%"
+                "<b>Percentage van ", institution_name, ":</b> ", round(postcode_percentage, 1), "%"
             ),
-            label = ~paste0(postcode, ": ", round(market_share_pct, 1), "% marktaandeel"),
+            label = ~paste0(postcode, ": ", round(postcode_percentage, 1), "% van ", institution_name),
             highlightOptions = highlightOptions(
                 weight = 2,
                 color = "black",
@@ -759,8 +730,8 @@ create_market_share_map <- function(market_share_data, geo_data_path, target_yea
         ) %>%
         addLegend(
             pal = color_palette,
-            values = ~market_share_pct,
-            title = "Marktaandeel (%)",
+            values = ~postcode_percentage,
+            title = "Percentage (%)",
             position = "bottomright"
         ) %>%
         setView(lng = 5.2, lat = 52.2, zoom = 8)
