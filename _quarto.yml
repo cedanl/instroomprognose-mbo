@@ -1,6 +1,0 @@
-project:
-  #type: website  # or book, manuscript, etc.
-  execute-dir: project  # This is the key setting!
-
-execute:
-  freeze: auto
