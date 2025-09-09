@@ -55,7 +55,12 @@ Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school
 
 # STAP 1: ALGEMENE ANALYSES OP VOLLEDIGE DATASET
 # Load complete applications data (alle instellingen)
-all_applications <- load_and_enrich_applications(config_env = "default")
+# Laad voorbereide datasets uit data_preparation.qmd
+all_applications <- read_csv(
+  paste0("data/02_prepared/applications_enriched_with_context",
+         config::get("suffix"),
+         ".csv"),
+  show_col_types = FALSE)
 
 cat("Volledige dataset geladen voor alle instellingen\n")
 cat("Totaal aantal rijen:", nrow(all_applications), "\n")
@@ -68,19 +73,13 @@ cat("Aantal unieke BRIN codes:", length(unique(all_applications$instellingserken
 #| cache: true
 
 # STAP 2: ANALYSES DIE MEERDERE INSTELLINGEN NODIG HEBBEN
-
 # Group applications op volledig niveau voor meervoudige aanmeldingen analyse
-grouped_all_applications <- group_applications(all_applications, "full")
+grouped_all_applications <- group_applications(all_applications)
+
 
 # Analyseer meervoudige aanmeldingen over alle instellingen
 multiple_applications_analysis <- analyze_multiple_applications(grouped_all_applications)
 
-# Add context per row for detailed analysis
-all_applications_with_context <- add_student_context_per_row(all_applications)
-
-cat("Algemene analyses voltooid op volledige dataset\n")
-cat("Gegroepeerde aanmeldingen (alle instellingen):", nrow(grouped_all_applications), "\n")
-cat("Dataset met context per rij:", nrow(all_applications_with_context), "\n")
 
 ```
 

@@ -31,8 +31,6 @@ execute:
 # Load environment setup and packages
 source("utils/00_setup.R")
 
-# Set config, change to cambo to run with real data from cambo
-Sys.setenv(R_CONFIG_ACTIVE = "cambo")
 
 ```
 
@@ -233,8 +231,8 @@ if (!dir.exists(prepared_dir)) {
 readr::write_csv(
     applications_enriched_and_schoolyear_quality,
     file.path(prepared_dir, 
-              paste0("applications_enriched_with_quality_",
-                     config::get("name"),
+              paste0("applications_enriched_with_quality",
+                     config::get("suffix"),
                      ".csv")
               )
 )
@@ -244,8 +242,8 @@ readr::write_csv(
     applications_enriched_with_context,
     file.path(prepared_dir,
               paste0(
-                  "applications_enriched_with_context_",
-                  config::get("name"),
+                  "applications_enriched_with_context",
+                  config::get("suffix"),
                   ".csv")
               )
 )
