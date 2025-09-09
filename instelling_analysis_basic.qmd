@@ -29,9 +29,10 @@ execute:
 
 # Load pipeline functions
 source("utils/00_setup.R")
-source("R/data_preparation.R")
-source("R/descriptive_analysis.R")
-source("R/data_quality.R")
+source("utils/manage_packages.R")
+
+# Load development functions
+devtools::load_all()
 
 # Set default params if not available (for testing)
 if (!exists("params")) {
@@ -50,37 +51,19 @@ if (!exists("params")) {
 Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school_name`** (BRIN: `r params$brin_code`) voor de schooljaren `r paste(params$years, collapse = " en ")`.
 
 ```{r}
-#| label: load-data-full-dataset
+#| label: load-prepared-data
 #| cache: true
 
-# STAP 1: ALGEMENE ANALYSES OP VOLLEDIGE DATASET
-# Load complete applications data (alle instellingen)
-all_applications <- load_and_enrich_applications(config_env = "default")
+# Laad voorbereide datasets uit data_preparation.qmd
+all_applications <- read_csv("data/02_prepared/applications_enriched_with_context.csv", show_col_types = FALSE)
+grouped_all_applications <- read_csv("data/02_prepared/applications_grouped.csv", show_col_types = FALSE)
 
-cat("Volledige dataset geladen voor alle instellingen\n")
-cat("Totaal aantal rijen:", nrow(all_applications), "\n")
-cat("Aantal unieke BRIN codes:", length(unique(all_applications$instellingserkenningscode)), "\n")
-
-```
-
-```{r}
-#| label: general-analysis-multiple-institutions
-#| cache: true
-
-# STAP 2: ANALYSES DIE MEERDERE INSTELLINGEN NODIG HEBBEN
-
-# Group applications op volledig niveau voor meervoudige aanmeldingen analyse
-grouped_all_applications <- group_applications(all_applications, "full")
+cat("Voorbereide datasets geladen\n")
+cat("Totaal aantal rijen (met context):", nrow(all_applications), "\n")
+cat("Aantal gegroepeerde aanmeldingen:", nrow(grouped_all_applications), "\n")
 
 # Analyseer meervoudige aanmeldingen over alle instellingen
 multiple_applications_analysis <- analyze_multiple_applications(grouped_all_applications)
-
-# Add context per row for detailed analysis
-all_applications_with_context <- add_student_context_per_row(all_applications)
-
-cat("Algemene analyses voltooid op volledige dataset\n")
-cat("Gegroepeerde aanmeldingen (alle instellingen):", nrow(grouped_all_applications), "\n")
-cat("Dataset met context per rij:", nrow(all_applications_with_context), "\n")
 
 ```
 
@@ -88,12 +71,10 @@ cat("Dataset met context per rij:", nrow(all_applications_with_context), "\n")
 #| label: filter-institution-data
 #| cache: true
 
-# STAP 3: FILTER VOOR SPECIFIEKE INSTELLING
-# Nu filteren we voor de specifieke instelling
+# Filter voor specifieke instelling
 institution_data <- filter_applications_on_brin(all_applications, brin_codes = params$brin_code)
-
-# Group applications voor deze instelling
-grouped_institution <- group_applications(institution_data, "full")
+grouped_institution <- grouped_all_applications %>%
+    filter(instellingserkenningscode == params$brin_code)
 
 cat("Data gefilterd voor", params$school_name, "\n")
 cat("Aantal rijen voor deze instelling:", nrow(institution_data), "\n")
@@ -134,228 +115,6 @@ gt(basic_stats) %>%
 
 ```
 
-## 2. Data Kwaliteit Analyse
-
-Deze sectie analyseert de kwaliteit van de data voor `r params$school_name`. We kijken naar postcode validiteit en consistentie van schooljaren. Een goede data kwaliteit is essentieel voor betrouwbare analyses.
-
-```{r}
-#| label: data-quality-analysis
-
-# Analyze data quality for this institution
-quality_results <- analyze_data_quality(institution_data, by_group = "schooljaar")
-
-# Get quality summary
-quality_summary <- get_data_quality_summary(quality_results)
-
-cat("Overall Quality Score:", quality_summary$overall_quality_score, "%\n")
-
-```
-
-### 2.1 Postcode Kwaliteit
-
-```{r}
-#| label: postcode-quality
-
-# Show postcode quality table
-quality_results$postcode_analysis %>%
-  gt() %>%
-  tab_header(
-    title = "Postcode Kwaliteit per Jaar",
-    subtitle = params$school_name
-  ) %>%
-  cols_label(
-    schooljaar = "Schooljaar",
-    totaal_aanmeldingen = "Totaal",
-    geldige_postcodes = "Geldige Postcodes",
-    ongeldige_postcodes = "Ongeldige Postcodes",  
-    percentage_ongeldig = "% Ongeldig"
-  ) %>%
-  fmt_percent(
-    columns = percentage_ongeldig,
-    decimals = 1,
-    scale_values = FALSE
-  )
-
-```
-
-```{r}
-#| label: postcode-quality-plot
-#| fig-height: 4
-
-# Plot postcode quality if there are invalid postcodes
-if (nrow(quality_results$postcode_analysis) > 0 && any(quality_results$postcode_analysis$ongeldige_postcodes > 0)) {
-  
-  quality_results$postcode_analysis %>%
-    ggplot(aes(x = factor(schooljaar), y = ongeldige_postcodes)) +
-    geom_col(fill = "steelblue", alpha = 0.7) +
-    geom_text(aes(label = paste0(percentage_ongeldig, "%")), vjust = -0.5) +
-    labs(
-      title = paste("Ongeldige Postcodes per Jaar -", params$school_name),
-      x = "Schooljaar",
-      y = "Aantal Ongeldige Postcodes"
-    ) +
-    theme_minimal()
-    
-}
-
-```
-
-### 2.2 Schooljaar Kwaliteit
-
-Hier analyseren we de consistentie tussen het geregistreerde schooljaar en het schooljaar afgeleid uit datums. Dit helpt om data-invoerfouten te identificeren.
-
-```{r}
-#| label: schooljaar-quality-preparation
-
-# Create schooljaar_afgeleid based on dates (similar to data_kwaliteit.qmd)
-institution_data_with_derived <- institution_data %>%
-  mutate(
-    # Parse dates using correct column names
-    created_date_parsed = lubridate::ymd_hms(createdat),
-    start_date_parsed = lubridate::ymd(begindatum),
-    
-    # Derive schooljaar from created date (October = new school year)
-    schooljaar_afgeleid_created = case_when(
-      is.na(created_date_parsed) ~ NA_integer_,
-      month(created_date_parsed) >= 10 ~ year(created_date_parsed) + 1,
-      month(created_date_parsed) < 10 ~ year(created_date_parsed),
-      .default = NA_integer_
-    ),
-    
-    # Derive from start date (August = new school year)
-    schooljaar_afgeleid_startmoment = case_when(
-      is.na(start_date_parsed) ~ NA_integer_,
-      month(start_date_parsed) >= 8 ~ year(start_date_parsed),
-      month(start_date_parsed) < 8 ~ year(start_date_parsed) - 1,
-      .default = NA_integer_
-    ),
-    
-    # Create final derived schooljaar with logic from data_kwaliteit.qmd
-    schooljaar_numeric = as.integer(as.character(schooljaar)),
-    schooljaar_afgeleid = case_when(
-      # If all agree, use original
-      schooljaar_numeric == schooljaar_afgeleid_startmoment & 
-        schooljaar_numeric == schooljaar_afgeleid_created ~ schooljaar_numeric,
-      # If original is 0, use created date derivation
-      schooljaar_numeric == 0 ~ schooljaar_afgeleid_created,
-      # Early applications in August/September
-      schooljaar_numeric == schooljaar_afgeleid_startmoment &
-        schooljaar_afgeleid_created == schooljaar_numeric - 1 &
-        month(created_date_parsed) %in% c(8,9) ~ schooljaar_numeric,
-      # Late applications on October 1st
-      schooljaar_numeric == schooljaar_afgeleid_startmoment &
-        schooljaar_afgeleid_created == schooljaar_numeric + 1 &
-        month(created_date_parsed) == 10 &
-        day(created_date_parsed) == 1 ~ schooljaar_numeric,
-      # Default to created date derivation
-      .default = coalesce(schooljaar_afgeleid_created, schooljaar_numeric)
-    )
-  )
-
-```
-
-```{r}
-#| label: schooljaar-quality-table
-
-# Create detailed schooljaar quality analysis like requested
-schooljaar_quality_analysis <- institution_data_with_derived %>%
-  # Create combination key for analysis
-  mutate(
-    combination_key = paste(schooljaar_numeric, schooljaar_afgeleid, sep = "-")
-  ) %>%
-  group_by(combination_key, schooljaar_numeric, schooljaar_afgeleid) %>%
-  summarise(
-    aantal_aanmeldingen = n(),
-    .groups = "drop"
-  ) %>%
-  arrange(schooljaar_numeric, schooljaar_afgeleid)
-
-# Calculate totals for percentage calculations
-totals_by_original <- schooljaar_quality_analysis %>%
-  group_by(schooljaar_numeric) %>%
-  summarise(total_original = sum(aantal_aanmeldingen), .groups = "drop")
-
-totals_by_derived <- schooljaar_quality_analysis %>%
-  group_by(schooljaar_afgeleid) %>%
-  summarise(total_derived = sum(aantal_aanmeldingen), .groups = "drop")
-
-# Create final table with percentages
-schooljaar_final_table <- schooljaar_quality_analysis %>%
-  left_join(totals_by_original, by = "schooljaar_numeric") %>%
-  left_join(totals_by_derived, by = "schooljaar_afgeleid") %>%
-  mutate(
-    pct_van_origineel_jaar = aantal_aanmeldingen / total_original * 100,
-    pct_van_afgeleid_jaar = aantal_aanmeldingen / total_derived * 100
-  ) %>%
-  select(
-    combination_key,
-    schooljaar_numeric, 
-    schooljaar_afgeleid,
-    aantal_aanmeldingen,
-    pct_van_origineel_jaar,
-    pct_van_afgeleid_jaar
-  )
-
-# Show the enhanced table
-schooljaar_final_table %>%
-  gt() %>%
-  tab_header(
-    title = "Schooljaar Kwaliteit Analyse",
-    subtitle = paste("Gedetailleerde analyse van schooljaar consistentie -", params$school_name)
-  ) %>%
-  cols_label(
-    combination_key = "Combinatie",
-    schooljaar_numeric = "Origineel Schooljaar",
-    schooljaar_afgeleid = "Afgeleid Schooljaar", 
-    aantal_aanmeldingen = "Aantal Aanmeldingen",
-    pct_van_origineel_jaar = "% van Origineel Jaar",
-    pct_van_afgeleid_jaar = "% van Afgeleid Jaar"
-  ) %>%
-  fmt_percent(
-    columns = c(pct_van_origineel_jaar, pct_van_afgeleid_jaar),
-    decimals = 1,
-    scale_values = FALSE
-  ) %>%
-  data_color(
-    columns = aantal_aanmeldingen,
-    colors = scales::col_numeric(
-      palette = c("white", "lightblue"),
-      domain = NULL
-    )
-  ) %>%
-  tab_footnote(
-    footnote = "% van Origineel Jaar: aandeel van dit jaar in het totaal van het originele schooljaar",
-    locations = cells_column_labels(columns = pct_van_origineel_jaar)
-  ) %>%
-  tab_footnote(
-    footnote = "% van Afgeleid Jaar: aandeel van dit jaar in het totaal van het afgeleide schooljaar", 
-    locations = cells_column_labels(columns = pct_van_afgeleid_jaar)
-  )
-
-cat("\\n**Interpretatie:** Deze tabel toont hoe goed de originele schooljaar registratie overeenkomt met het schooljaar afgeleid uit datums. Een perfecte match (bijv. 2023-2023) met 100% van origineel jaar betekent dat alle aanmeldingen van dat jaar correct geregistreerd zijn.\\n")
-
-```
-
-```{r}
-#| label: detailed-schooljaar-comparison
-
-# Show summary of schooljaar quality
-discrepancies <- schooljaar_final_table %>%
-  filter(schooljaar_numeric != schooljaar_afgeleid) %>%
-  nrow()
-
-if (discrepancies > 0) {
-  cat("\n📊 **Samenvatting Schooljaar Kwaliteit:**\n")
-  cat("- Aantal combinaties met afwijkingen:", discrepancies, "\n")
-  cat("- Totaal aantal combinaties:", nrow(schooljaar_final_table), "\n")
-  cat("- Percentage perfecte matches:", round((nrow(schooljaar_final_table) - discrepancies) / nrow(schooljaar_final_table) * 100, 1), "%\n\n")
-  
-  cat("**Aanbeveling:** Onderzoek de oorzaken van schooljaar discrepanties om data kwaliteit te verbeteren.\n")
-} else {
-  cat("✅ **Uitstekende Data Kwaliteit**: Alle schooljaren komen perfect overeen - geen aanpassingen nodig.\n")
-}
-
-```
 
 ## 3. Conversie Overzicht
 
