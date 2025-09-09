@@ -1,17 +1,3 @@
-#!/usr/bin/env Rscript
-
-#' Render Institution Analysis Reports
-#'
-#' @description
-#' Script to render instelling_analysis.qmd for specific institutions or all institutions.
-#' Creates HTML reports in organized subdirectories with proper naming.
-#'
-#' @author Corneel den Hartogh
-
-# Load required libraries and functions
-source("utils/00_setup.R")
-source("R/data_pipeline.R")
-
 #' Get Institution List
 #'
 #' @description
@@ -27,18 +13,18 @@ get_institution_list <- function(config_env = "default") {
     applications <- load_and_enrich_applications(config_env)
 
     # Extract unique institutions with valid names
-    institutions <- applications %>%
+    institutions <- applications |>
         filter(
             !is.na(instellingserkenningscode),
             !is.na(school),
             nchar(trimws(instellingserkenningscode)) > 0,
             nchar(trimws(school)) > 0
-        ) %>%
+        ) |>
         select(
             brin_code = instellingserkenningscode,
             school_name = school
-        ) %>%
-        distinct() %>%
+        ) |>
+        distinct() |>
         arrange(brin_code)
 
     cat("Found", nrow(institutions), "unique institutions\n")
@@ -135,7 +121,7 @@ render_multiple_institution_reports <- function(
             stop("brin_codes must be provided when mode = 'specific'")
         }
 
-        target_institutions <- institutions %>%
+        target_institutions <- institutions |>
             filter(brin_code %in% brin_codes)
 
         if (nrow(target_institutions) == 0) {
