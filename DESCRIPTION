@@ -13,4 +13,10 @@ Imports:
     lubridate,
     readr,
     rlang,
-    config
+    config,
+    leaflet, 
+    purrr, 
+    readxl, 
+    sf, 
+    tibble, 
+    tidyr
