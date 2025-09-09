@@ -1,8 +1,31 @@
 
 default:
-  name: "synthetic"
-  applications_filename: "aanmeldingen_oktober_2024_synthetic.csv"
+  suffix: "_DEMO"
+  applications_filename: "aanmeldingen_oktober_2024_DEMO.csv"
 
 cambo:
-  name: "cambo"
-  applications_filename: "aanmeldingen_oktober_2024_cambo.csv"
+  suffix: ""
+  applications_filename: "aanmeldingen_oktober_2024.csv"
+
+mboa:
+  # dat is demo modus, "cambo" gebruikt echte data
+  inherits: "default"
+  # of de data_preparation opnieuw moet draaien. Als bestanden ontbreken, dan wordt dit automatisch gedaan
+  prepare: false
+  # echte brin, moet bestaan
+  brin: "30RR"
+  # naam instelling in de plots en tekst
+  school_name: "MBO Amersfoort"
+  # 2023 of 2024
+  year: 2024
+  # "overall" of "related brins""
+  benchmark: "overall"
+  # leeg betekent dynamisch, maar je kunt hier ook een lijst van brins zetten. Alleen de eerste 3 worden gebruikt
+  related_brins: []
+
+all:
+  inherits: "default"
+  prepare: false
+  year: 2024
+  benchmark: "related brins"
+  related_brins: []
