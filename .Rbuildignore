@@ -11,9 +11,14 @@
 # Project specific
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^.claude/
 ^LICENSE\.md$
 ^data/
 ^00_setup.R
+^CLAUDE.md
+^_site/
+^notebooks
+render_instelling_reports.R
 
 # Environment management
 ^renv$

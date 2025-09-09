@@ -1,10 +1,8 @@
 
 default:
-  name: "Synthetish"
-  data_base_dir: "data/synthetic"
+  name: "synthetic"
   applications_filename: "aanmeldingen_oktober_2024_synthetic.csv"
 
 cambo:
-  name: "CAMBO"
-  data_base_dir: "data/cambo"
-  applications_filename: "aanmeldingen_oktober_2024.csv"
+  name: "cambo"
+  applications_filename: "aanmeldingen_oktober_2024_cambo.csv"

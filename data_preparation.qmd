@@ -1,0 +1,269 @@
+---
+title: "Data Preparatie MBO Instroom"
+author: "CEDA"
+date: "`r Sys.Date()`"
+# Custom chapter numbering
+number-sections: true
+
+format:
+  html:
+    toc: true
+    theme: cosmo
+    code-fold: true
+    code-summary: "Laat code zien"
+    fontsize: 1.1em
+
+editor: source
+
+execute:
+  cache: false
+  freeze: auto
+  include: true
+  warning: false
+  message: false
+---
+
+# Setup
+
+```{r}
+#| label: setup
+
+# Load environment setup and packages
+source("utils/00_setup.R")
+
+# Set config, change to cambo to run with real data from cambo
+Sys.setenv(R_CONFIG_ACTIVE = "cambo")
+
+```
+
+# Data Inladen
+
+Eerst laden we de raw applicatie data uit de geconfigureerde databron:
+
+```{r}
+#| label: load-applications
+
+# Laad de applicatie data
+applications_raw <- load_applications()
+
+cli::cli_alert_info("Applicatie data geladen: {nrow(applications_raw)} rijen")
+cli::cli_alert_info("Periode: {min(applications_raw$begindatum, na.rm = TRUE)} tot {max(applications_raw$begindatum, na.rm = TRUE)}")
+```
+
+# Data Verrijking
+
+Nu standaardiseren en verrijken we de applicatie data met de referentie informatie:
+
+```{r}
+#| label: enrich-applications
+
+applications_enriched_with_program_variables <- add_external_program_variables(applications_raw)
+
+applications_enriched_with_date_info <- add_derived_date_variables(applications_enriched_with_program_variables)
+
+applications_enriched_with_status_info <- add_derived_status_variables(applications_enriched_with_date_info)
+
+applications_enriched_with_postcode_info <- add_derived_postcode_variables(applications_enriched_with_status_info)
+
+applications_enriched_and_schoolyear_quality <- add_derived_schoolyear(applications_enriched_with_postcode_info)
+
+
+cli::cli_alert_success("Data verrijkt: {nrow(applications_enriched_and_schoolyear_quality)} rijen behouden")
+
+# Toon enkele voorbeeldkolommen
+glimpse(applications_enriched_with_program_variables |> select(
+    bsnhash, schooljaar, opleidingcode, Opleidingsnaam,
+    instellingserkenningscode, school, status, begindatum
+))
+```
+
+
+# Data kwaliteit
+
+Deze sectie analyseert de kwaliteit van de data. We kijken naar postcode validiteit en consistentie van schooljaren. Een goede data kwaliteit is essentieel voor betrouwbare analyses.
+
+```{r}
+#| label: data-quality-analysis
+
+# Analyze data quality for this institution
+quality_results <- analyze_data_quality(applications_enriched_and_schoolyear_quality, by_group = "schooljaar")
+
+# Get quality summary
+quality_summary <- get_data_quality_summary(quality_results)
+
+cat("Overall Quality Score:", quality_summary$overall_quality_score, "%\n")
+
+```
+
+## Schooljaar Kwaliteit
+
+Hier analyseren we de consistentie tussen het geregistreerde schooljaar en het schooljaar afgeleid uit datums. Dit helpt om data-invoerfouten te identificeren.
+
+```{r}
+#| label: schooljaar-comparison-table
+
+# Maak detailleerde vergelijking tussen origineel en afgeleid schooljaar
+schooljaar_comparison <- applications_enriched_and_schoolyear_quality %>%
+    group_by(schooljaar, schooljaar_afgeleid) %>%
+    summarise(aantal_aanmeldingen = n(), .groups = "drop") %>%
+    arrange(schooljaar, schooljaar_afgeleid)
+
+# Bereken totalen voor percentage berekeningen
+totals_by_original <- schooljaar_comparison %>%
+    group_by(schooljaar) %>%
+    summarise(total_original = sum(aantal_aanmeldingen), .groups = "drop")
+
+totals_by_derived <- schooljaar_comparison %>%
+    group_by(schooljaar_afgeleid) %>%
+    summarise(total_derived = sum(aantal_aanmeldingen), .groups = "drop")
+
+# Maak finale tabel met percentages
+schooljaar_final_table <- schooljaar_comparison %>%
+    left_join(totals_by_original, by = "schooljaar") %>%
+    left_join(totals_by_derived, by = "schooljaar_afgeleid") %>%
+    mutate(
+        pct_van_origineel_jaar = aantal_aanmeldingen / total_original * 100,
+        pct_van_afgeleid_jaar = aantal_aanmeldingen / total_derived * 100
+    ) %>%
+    select(
+        schooljaar, 
+        schooljaar_afgeleid,
+        aantal_aanmeldingen,
+        pct_van_origineel_jaar,
+        pct_van_afgeleid_jaar
+    )
+
+# Toon de tabel
+schooljaar_final_table %>%
+    gt() %>%
+    tab_header(
+        title = "Schooljaar Kwaliteit Analyse",
+        subtitle = "Vergelijking tussen origineel en afgeleid schooljaar"
+    ) %>%
+    cols_label(
+        schooljaar = "Origineel Schooljaar",
+        schooljaar_afgeleid = "Afgeleid Schooljaar", 
+        aantal_aanmeldingen = "Aantal Aanmeldingen",
+        pct_van_origineel_jaar = "% van Origineel Jaar",
+        pct_van_afgeleid_jaar = "% van Afgeleid Jaar"
+    ) %>%
+    fmt_number(
+        columns = c(pct_van_origineel_jaar, pct_van_afgeleid_jaar),
+        decimals = 1
+    ) %>%
+    tab_footnote(
+        footnote = "% van Origineel Jaar: aandeel van dit jaar in het totaal van het originele schooljaar",
+        locations = cells_column_labels(columns = pct_van_origineel_jaar)
+    ) %>%
+    tab_footnote(
+        footnote = "% van Afgeleid Jaar: aandeel van dit jaar in het totaal van het afgeleide schooljaar", 
+        locations = cells_column_labels(columns = pct_van_afgeleid_jaar)
+    )
+
+```
+
+```{r}
+#| label: schooljaar-visualization
+#| fig-height: 6
+
+# Visualisatie van schooljaar vergelijking (gebaseerd op notebooks/data_kwaliteit.qmd punt 2.2.1)
+ggplot(schooljaar_comparison, aes(x = factor(schooljaar_afgeleid), y = aantal_aanmeldingen, fill = factor(schooljaar))) +
+    geom_bar(stat = "identity", position = "stack") +
+    scale_fill_manual(values = c(
+        "0" = "#E8A15D",     # Oranje voor schooljaar 0
+        "2021" = "#B4C7E7",  # Lichtblauw
+        "2022" = "#8FAADC",  # Middenblauw
+        "2023" = "#5B9BD5",  # Blauw
+        "2024" = "#4472C4"   # Donkerblauw
+    )) +
+    labs(
+        title = "Verdeling van Afgeleid Schooljaar vs Origineel Schooljaar",
+        subtitle = "Afgeleid op basis van datum en startmoment",
+        x = "Afgeleid Schooljaar",
+        y = "Aantal Aanmeldingen",
+        fill = "Origineel Schooljaar"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+#| label: schooljaar-quality-summary
+
+# Samenvatting van schooljaar kwaliteit
+discrepancies <- schooljaar_final_table %>%
+    filter(schooljaar != schooljaar_afgeleid) %>%
+    nrow()
+
+perfect_matches <- schooljaar_final_table %>%
+    filter(schooljaar == schooljaar_afgeleid) %>%
+    nrow()
+
+total_combinations <- nrow(schooljaar_final_table)
+
+```
+
+# Data Context
+
+Tot slot voegen we contextuele informatie toe over de student, gebaseerd op andere instellingen:
+
+```{r}
+#| label: add-context
+
+applications_enriched_with_context <- add_student_context_per_row(applications_enriched_and_schoolyear_quality)
+
+```
+
+# Data Export
+
+Sla beide datasets op in de prepared data directory:
+
+```{r}
+#| label: export-datasets
+
+# Maak output directory aan als deze niet bestaat
+prepared_dir <- "data/02_prepared"
+if (!dir.exists(prepared_dir)) {
+    dir.create(prepared_dir, recursive = TRUE)
+}
+
+
+# Export basis dataset
+readr::write_csv(
+    applications_enriched_and_schoolyear_quality,
+    file.path(prepared_dir, 
+              paste0("applications_enriched_with_quality_",
+                     config::get("name"),
+                     ".csv")
+              )
+)
+
+# Export basic dataset with context from other institutions
+readr::write_csv(
+    applications_enriched_with_context,
+    file.path(prepared_dir,
+              paste0(
+                  "applications_enriched_with_context_",
+                  config::get("name"),
+                  ".csv")
+              )
+)
+
+cli::cli_alert_success("Datasets opgeslagen in {prepared_dir}")
+```
+
+# Samenvatting
+
+Er zijn nu twee datasets beschikbaar:
+
+1. **applications_enriched_with_quality.csv**: CAMBO data verrijkt met referentie informatie zoals BRIN en opleidingsformatie
+   - Aantal rijen: `r nrow(applications_enriched_and_schoolyear_quality)`
+   - Gebruik voor: analyse van aanmeldpatronen per instelling
+
+1. **applications_enriched_with_context.csv**: Alle originele rijen behouden, met toegevoegde context per rij over de student (ook obv van informatie van aanmeldingen buiten instelling)
+   - Aantal rijen: `r nrow(applications_enriched_with_context)`
+   - Gebruik voor: benchmarking en vergelijking tussen instellingen
+
+
+Deze datasets kunnen nu gebruikt worden in verdere analyses zonder dat de data preparatie stappen herhaald hoeven te worden.

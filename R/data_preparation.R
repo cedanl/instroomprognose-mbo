@@ -1,24 +1,20 @@
-#' Load and Enrich Applications Data
+#' Load Applications Data
 #'
 #' @description
-#' Loads applications data from config and enriches with reference data (BRIN and programmes).
-#' This function combines the data loading pattern used in both QMD files.
+#' Loads raw applications data from configured data source.
 #'
-#' @param config_env String specifying config environment ("default" or "cambo")
-#' @return A tibble with enriched applications data
+#' @return A tibble with applications data
 #'
 #' @importFrom config get
-#' @importFrom readxl read_excel
-#' @importFrom dplyr left_join mutate as.integer
 #' @importFrom readr cols col_guess
 #'
 #' @export
-load_and_enrich_applications <- function(config_env = "default") {
+load_applications <- function() {
 
   # Load applications data using config
   applications_filepath <- file.path(
-    config::get("data_base_dir", config = config_env),
-    config::get("applications_filename", config = config_env)
+    "data/01_raw",
+    config::get("applications_filename")
   )
 
   applications <- safe_read_csv(
@@ -30,90 +26,81 @@ load_and_enrich_applications <- function(config_env = "default") {
     )
   )
 
-  # Load reference data
-  brin <- read_excel("data/reference/BRIN.xlsx")
-  programmes <- read_excel("data/reference/Opleiding_dimensie.xlsx")
+  return(applications)
+}
+
+
+#' Load BRIN Information
+#'
+#' @description
+#' Loads institutional information from BRIN reference data.
+#'
+#' @return A tibble with BRIN information
+#'
+#' @importFrom readxl read_excel
+#'
+#' @export
+load_brin_info <- function() {
+  read_excel("data/reference/BRIN.xlsx")
+}
+
+
+#' Load Programmes Information
+#'
+#' @description
+#' Loads programme information from reference data.
+#'
+#' @return A tibble with programmes information
+#'
+#' @importFrom readxl read_excel
+#'
+#' @export
+load_programmes_info <- function() {
+  read_excel("data/reference/Opleiding_dimensie.xlsx")
+}
+
+
+#' Add Program information
+#'
+#' @description
+#' Enriches applications data with reference data (BRIN and programmes).
+#'
+#' @param applications Applications data tibble
+#' @return A tibble with enriched applications data
+#'
+#' @importFrom dplyr left_join mutate
+#'
+#' @export
+add_external_program_variables <- function(applications) {
+
+  brin <- load_brin_info()
+  programmes <- load_programmes_info()
 
   # Enrich applications with reference data
-  applications_enriched <- applications %>%
+  applications_enriched <- applications |>
     # Convert opleidingcode to integer for joining (drops small % of non-numeric values)
-    mutate(opleidingcode = as.integer(opleidingcode)) %>%
-    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) %>%
+    mutate(opleidingcode = as.integer(opleidingcode)) |>
+    left_join(programmes, by = c("opleidingcode" = "Opleidingcode")) |>
     left_join(brin, by = c("instellingserkenningscode" = "BRIN"))
 
   return(applications_enriched)
 }
 
 
-#' Group Applications Data
+#' Load and Enrich Applications Data (Legacy Function)
 #'
 #' @description
-#' Groups applications data at different levels and calculates aggregated metrics.
-#' Based on the grouping logic from instroomprognose_prototype.qmd.
+#' Legacy function that combines loading and enriching for backward compatibility.
+#' Consider using the separate load_applications() and add_external_program_variables() functions instead.
 #'
-#' @param data Applications dataset
-#' @param grouping_level String: "full" (student+programme+institution),
-#'                              "institution" (student+institution only),
-#'                              "student" (student level only)
-#' @return Grouped tibble with aggregated metrics
-#'
-#' @importFrom dplyr group_by summarise mutate ungroup add_tally
-#' @importFrom lubridate as.Date
+#' @return A tibble with enriched applications data
 #'
 #' @export
-group_applications <- function(data, grouping_level = "full") {
-
-  # Ensure date format
-  data <- data %>%
-    mutate(begindatum = as.Date(begindatum))
-
-  # Define grouping variables based on level
-  grouping_vars <- switch(
-    grouping_level,
-    "full" = c("bsnhash", "schooljaar", "opleidingcode", "Opleidingsnaam",
-               "instellingserkenningscode", "school"),
-    "institution" = c("bsnhash", "schooljaar", "instellingserkenningscode", "school"),
-    "student" = c("bsnhash", "schooljaar"),
-    stop("Invalid grouping_level. Use 'full', 'institution', or 'student'")
-  )
-
-  # Perform grouping and aggregation
-  grouped_data <- data %>%
-    group_by(across(all_of(grouping_vars))) %>%
-    summarise(
-      application_duration_days = as.numeric(max(begindatum) - min(begindatum)),
-      statusses = paste(status, collapse = ", "),
-      is_enrolled = any(status == "ENROLLED"),
-      leertrajectmbo = paste(unique(leertrajectmbo), collapse = ", "),
-      statussource = paste(unique(statussource), collapse = ", "),
-      .groups = "drop"
-    )
-
-  # Add multiple application flags if grouping at student level
-  if (grouping_level %in% c("full", "institution")) {
-    grouped_data <- grouped_data %>%
-      group_by(bsnhash, schooljaar) %>%
-      add_tally(name = "applications_total_number") %>%
-      ungroup()
-
-    if (grouping_level == "full") {
-      grouped_data <- grouped_data %>%
-        group_by(bsnhash, schooljaar, instellingserkenningscode) %>%
-        add_tally(name = "applications_total_number_within_institution") %>%
-        ungroup() %>%
-        group_by(bsnhash, schooljaar) %>%
-        mutate(applications_total_number_of_institutions = length(unique(instellingserkenningscode))) %>%
-        ungroup() %>%
-        mutate(
-          applications_is_multiple = applications_total_number > 1,
-          applications_is_multiple_within_institution = applications_total_number_within_institution > 1,
-          applications_is_multiple_across_institutions = applications_total_number_of_institutions > 1
-        )
-    }
-  }
-
-  return(grouped_data)
+load_and_enrich_applications <- function() {
+  applications <- load_applications()
+  return(add_external_program_variables(applications))
 }
+
 
 
 #' Get All BRIN Codes from Data
@@ -135,371 +122,273 @@ get_all_brin_codes <- function(data = NULL, min_applications = 50) {
   }
 
   # Get BRIN codes with sufficient applications
-  brin_codes <- data %>%
-    count(instellingserkenningscode, sort = TRUE) %>%
-    filter(n >= min_applications) %>%
+  brin_codes <- data |>
+    count(instellingserkenningscode, sort = TRUE) |>
+    filter(n >= min_applications) |>
     pull(instellingserkenningscode)
 
   return(brin_codes)
 }
 
 
-#' Analyze Application Timing Patterns
+#' Add derived data variables
 #'
 #' @description
-#' Analyzes when applications are submitted during the academic year.
-#' Based on temporal analysis from instroomprognose_prototype.qmd.
+#' Adds derived date-related variables to the applications data for temporal analysis.
 #'
 #' @param data Applications dataset
-#' @param academic_year_start_month Integer month when academic year starts (default: 10 for October)
-#' @return List with monthly statistics and grouped data for plotting
+#' @return Data with added date variables
 #'
-#' @importFrom dplyr mutate group_by summarise filter
-#' @importFrom lubridate floor_date month year as.Date
-#'
-#' @export
-analyze_application_timing <- function(data, academic_year_start_month = 10) {
-
-    # Prepare temporal data with academic year calculations
-    applications_temporal <- data %>%
-        mutate(
-            begindatum = as.Date(begindatum),
-            month_number = month(begindatum),
-            year_number = year(begindatum),
-            # Calculate academic year and month
-            academic_year = if_else(month_number >= academic_year_start_month,
-                                  schooljaar, schooljaar - 1),
-            academic_month = if_else(month_number >= academic_year_start_month,
-                                   month_number - (academic_year_start_month - 1),
-                                   month_number + (12 - academic_year_start_month + 1))
-        ) %>%
-        filter(!is.na(begindatum))
-
-    # Calculate monthly statistics
-    monthly_stats <- applications_temporal %>%
-        group_by(schooljaar, academic_month) %>%
-        summarise(
-            applications = n(),
-            unique_students = length(unique(bsnhash)),
-            conversions = sum(status == "ENROLLED", na.rm = TRUE),
-            conversion_rate = mean(status == "ENROLLED", na.rm = TRUE) * 100,
-            .groups = "drop"
-        )
-
-    # Create month labels for visualization
-    month_labels <- c("Okt", "Nov", "Dec", "Jan", "Feb", "Mrt",
-                     "Apr", "Mei", "Jun", "Jul", "Aug", "Sep")
-
-    return(list(
-        monthly_stats = monthly_stats,
-        month_labels = month_labels,
-        temporal_data = applications_temporal
-    ))
-}
-
-
-#' Analyze Multiple Application Patterns
-#'
-#' @description
-#' Analyzes students with multiple applications and their conversion patterns.
-#' Based on analysis from instroomprognose_prototype.qmd section 3.
-#'
-#' @param data Applications dataset (should be grouped data from group_applications)
-#' @return List with multiple application analysis results
-#'
-#' @importFrom dplyr group_by summarise mutate case_when select distinct
+#' @importFrom dplyr mutate arrange case_when if_else
+#' @importFrom lubridate ymd_hms week year month ymd
 #'
 #' @export
-analyze_multiple_applications <- function(data) {
+add_derived_date_variables <- function(data) {
 
-    # Ensure we have the multiple application flags
-    if (!"applications_is_multiple" %in% names(data)) {
-        stop("Data must be grouped with group_applications(grouping_level = 'full') first")
-    }
-
-    # Analyze conversion by application pattern
-    conversion_by_pattern <- data %>%
-        group_by(
-            applications_is_multiple,
-            applications_is_multiple_within_institution,
-            applications_is_multiple_across_institutions
-        ) %>%
-        summarise(
-            total = n(),
-            enrolled = sum(is_enrolled, na.rm = TRUE),
-            conversion_rate = mean(is_enrolled, na.rm = TRUE) * 100,
-            .groups = "drop"
-        ) %>%
+    # Prepare data with dates
+    data_with_dates <- data |>
         mutate(
-            pattern_type = case_when(
-                applications_is_multiple_within_institution & applications_is_multiple_across_institutions ~
-                    "Binnen én tussen instellingen",
-                applications_is_multiple_within_institution ~ "Binnen dezelfde instelling",
-                applications_is_multiple_across_institutions ~ "Tussen verschillende instellingen",
-                TRUE ~ "Slechts één aanmelding"
-            )
-        )
-
-    # Analyze distribution of application counts
-    application_count_distribution <- data %>%
-        select(bsnhash, schooljaar, applications_total_number) %>%
-        distinct() %>%
-        group_by(schooljaar, applications_total_number) %>%
-        summarise(
-            students = n(),
-            .groups = "drop"
-        ) %>%
-        group_by(schooljaar) %>%
-        mutate(
-            students_pct = students / sum(students) * 100
-        ) %>%
-        ungroup() %>%
-        filter(applications_total_number <= 10)  # Limit for visualization
-
-    # Analyze conversion by application count
-    student_enrollment <- data %>%
-        select(bsnhash, schooljaar, applications_total_number, is_enrolled) %>%
-        group_by(bsnhash, schooljaar) %>%
-        summarise(
-            applications_total_number = first(applications_total_number),
-            student_enrolled = any(is_enrolled),
-            .groups = "drop"
-        )
-
-    conversion_by_count <- student_enrollment %>%
-        group_by(schooljaar, applications_total_number) %>%
-        summarise(
-            students = n(),
-            converted_students = sum(student_enrolled),
-            student_conversion_rate = mean(student_enrolled) * 100,
-            .groups = "drop"
-        ) %>%
-        filter(applications_total_number <= 10) %>%
-        mutate(
-            application_conversion_rate = converted_students / (students * applications_total_number) * 100
-        )
-
-    return(list(
-        conversion_by_pattern = conversion_by_pattern,
-        application_count_distribution = application_count_distribution,
-        conversion_by_count = conversion_by_count
-    ))
-}
-
-
-#' Analyze Status Transitions
-#'
-#' @description
-#' Analyzes how application statuses change over time during the academic year.
-#' Based on complex status transition analysis from instroomprognose_prototype.qmd.
-#'
-#' @param data Raw applications dataset (not grouped)
-#' @param target_year Integer year to analyze (default: 2024)
-#' @return List with status transition analysis results
-#'
-#' @importFrom dplyr arrange group_by mutate filter lag summarise ungroup
-#' @importFrom lubridate week as.Date month year
-#'
-#' @export
-analyze_status_transitions <- function(data, target_year = 2024) {
-    # Step 1: Prepare the data
-    status_data <- prepare_status_data(data, target_year)
-
-    # Step 2: Count new statuses by week
-    new_status_by_week <- count_new_status_by_week(status_data)
-
-    # Step 3: Calculate transitions
-    status_transitions <- calculate_status_transitions(status_data)
-
-    # Step 4: Build running counts
-    result <- build_running_status_counts(new_status_by_week, status_transitions)
-
-    # Step 5: Create month mappings
-    month_labels <- c("Okt", "Nov", "Dec", "Jan", "Feb", "Mrt",
-                     "Apr", "Mei", "Jun", "Jul", "Aug", "Sep")
-
-    month_start_weeks <- status_data %>%
-        filter(!is.na(academic_month)) %>%
-        group_by(academic_month) %>%
-        summarise(start_week = min(academic_week, na.rm = TRUE), .groups = "drop") %>%
-        filter(!is.na(start_week))
-
-    return(list(
-        result = result,
-        new_status_by_week = new_status_by_week,
-        status_transitions = status_transitions,
-        month_labels = month_labels,
-        month_start_weeks = month_start_weeks
-    ))
-}
-
-
-#' Prepare status data for temporal analysis
-#'
-#' @param data Applications dataset
-#' @param target_year Integer year to analyze (default: 2024)
-#' @return Data frame with processed status data
-#'
-#' @importFrom dplyr filter mutate
-#' @importFrom lubridate week as.Date month year
-#'
-#' @export
-prepare_status_data <- function(data, target_year = 2024) {
-    data %>%
-        filter(schooljaar == target_year) %>%
-        mutate(
-            begindatum = as.Date(begindatum),
-            week_of_year = week(begindatum),
-            year_of_date = year(begindatum),
+            begindatum_parsed = as.Date(begindatum),
+            created_date_parsed = ymd_hms(createdat),
+            week_of_year = week(begindatum_parsed),
+            year_of_date = year(begindatum_parsed),
             # Calculate academic week number
             academic_week = case_when(
-                month(begindatum) >= 10 ~ week_of_year - week(as.Date(paste0(year_of_date, "-10-01"))) + 1,
-                TRUE ~ week_of_year + (52 - week(as.Date(paste0(year_of_date-1, "-10-01")))) + 1
+              month(begindatum_parsed) >= 10 ~ week_of_year - week(ymd(paste0(year_of_date, "-10-01"))) + 1,
+              TRUE ~ week_of_year + (52 - week(ymd(paste0(year_of_date-1, "-10-01")))) + 1
             ),
-            academic_month = if_else(month(begindatum) >= 10,
-                                   month(begindatum) - 9,
-                                   month(begindatum) + 3),
-            # Categorize status
-            status_category = case_when(
-                status == "SUBMITTED" ~ "Submitted",
-                status == "RECEIVED" ~ "Received",
-                status == "OFFERED" ~ "Offered",
-                status == "ENROLLED" ~ "Enrolled",
-                status == "REJECTED" ~ "Rejected",
-                status == "WITHDRAWN" ~ "Withdrawn",
-                TRUE ~ "Other"
-            )
-        ) %>%
-        filter(!is.na(begindatum))
+            academic_month = if_else(month(begindatum_parsed) >= 10,
+                                     month(begindatum_parsed) - 9,
+                                     month(begindatum_parsed) + 3)
+        )
+    return(data_with_dates)
 }
 
-#' Count new status entries by week
+#' Add derived status variables
 #'
-#' @param status_data Processed status data from prepare_status_data
-#' @return Data frame with new status counts by week
+#' @description
+#' Adds derived status-related variables to the applications data for analysis.
 #'
-#' @importFrom dplyr group_by summarise
+#' @param data Applications dataset
+#' @return Data with added status variables
+#'
+#' @importFrom dplyr mutate arrange case_when
 #'
 #' @export
-count_new_status_by_week <- function(status_data) {
-    status_data %>%
-        group_by(
-            bsnhash, schooljaar, opleidingcode, instellingserkenningscode,
-            academic_week, academic_month, status_category
-        ) %>%
-        summarise(
-            count = n_distinct(bsnhash, opleidingcode, instellingserkenningscode),
-            .groups = "drop"
-        )
+add_derived_status_variables <- function(data) {
+
+  # Define status order (lower number = higher priority)
+  status_order <- c(
+    "ENROLLED" = 6,
+    "OFFERED" = 5,
+    "RECEIVED" = 4,
+    "SUBMITTED" = 3,
+    "WITHDRAWN" = 2,
+    "REJECTED" = 1
+  )
+
+
+  # Prepare data with dates
+  data_prepared <- data |>
+    mutate(
+      status_numeric = status_order[status], status_numeric = ifelse(is.na(status_numeric), 0, status_numeric), # Categorize status
+      status_proper_case = case_when(
+        status == "SUBMITTED" ~ "Submitted",
+        status == "RECEIVED" ~ "Received",
+        status == "OFFERED" ~ "Offered",
+        status == "ENROLLED" ~ "Enrolled",
+        status == "REJECTED" ~ "Rejected",
+        status == "WITHDRAWN" ~ "Withdrawn",
+        TRUE ~ NA_character_
+      )
+    )
+
+    return(data_prepared)
 }
 
-#' Calculate status transitions between weeks
+#' Add Postal Code info
 #'
-#' @param status_data Processed status data from prepare_status_data
-#' @return Data frame with status transitions
+#' @description
+#' Adds numeric variable and validation flag for correct postcode to dataset.
 #'
-#' @importFrom dplyr arrange group_by mutate filter lag summarise
+#'
+#' @param data Dataset with postcodecijfers column
+#' @return Dataset with valid_postcode flag added
+#'
+#' @importFrom dplyr mutate
+#' @importFrom readr parse_number
 #'
 #' @export
-calculate_status_transitions <- function(status_data) {
-    status_data %>%
-        arrange(bsnhash, schooljaar, opleidingcode, instellingserkenningscode, begindatum) %>%
-        group_by(bsnhash, schooljaar, opleidingcode, instellingserkenningscode) %>%
-        mutate(
-            prev_status = lag(status_category),
-            prev_week = lag(academic_week)
-        ) %>%
-        filter(!is.na(prev_status) & status_category != prev_status) %>%
-        group_by(academic_week, academic_month, prev_status, status_category) %>%
-        summarise(
-            transition_count = n(),
-            .groups = "drop"
-        )
+add_derived_postcode_variables <- function(data) {
+
+  # Function to check if postcodecijfers is valid
+  # Valid postcodecijfers consist of exactly 4 numeric characters
+  is_valid_postcode_digits <- function(postcodecijfers) {
+    ifelse(is.na(postcodecijfers), FALSE, grepl("^\\d{4}$", postcodecijfers))
+  }
+
+  # Add validation flag to dataset
+  data_prepared <- data |>
+    mutate(
+      valid_postcode = is_valid_postcode_digits(postcodecijfers),
+      postcode_4_numeriek = parse_number(postcodecijfers)
+    )
+
+  return(data_prepared)
+
 }
 
-#' Build running status counts over time
+
+#' Derive School Year from Dates
 #'
-#' @param new_status_by_week New status counts by week
-#' @param status_transitions Status transitions data
-#' @return Data frame with running status counts and percentages
+#' @description
+#' Derives correct school year from created_date and startmoment using complex logic.
+#' Based on the extensive case_when logic from data_kwaliteit.qmd section 2.2.
 #'
-#' @importFrom dplyr left_join group_by summarise mutate
-#' @importFrom tibble tibble
-#' @importFrom tidyr complete
+#' @param data Dataset with createdat, begindatum, startmoment columns
+#' @return Dataset with schooljaar_afgeleid column added
+#'
+#' @importFrom dplyr mutate case_when
+#' @importFrom lubridate month day year
 #'
 #' @export
-build_running_status_counts <- function(new_status_by_week, status_transitions) {
-    # Get all unique weeks and statuses
-    all_weeks <- sort(unique(new_status_by_week$academic_week))
-    all_statuses <- unique(new_status_by_week$status_category)
+add_derived_schoolyear <- function(data) {
 
-    # Initialize results
-    result <- data.frame()
+  # Check for parsing issues
+  no_dates <- sum(is.na(data$created_date_parsed))
+  if (no_dates > 0) {
+    warning(paste("Er zijn", no_dates, "datums niet correct geparsed."))
+  }
 
-    # Build running counts matrix
-    status_counts <- matrix(0, nrow = length(all_weeks), ncol = length(all_statuses))
-    colnames(status_counts) <- all_statuses
-    rownames(status_counts) <- all_weeks
+  # Derive school years based on created_date and startmoment
+  data_with_derived <- data |>
+    mutate(
+      schooljaar_afgeleid_created = case_when(
+        is.na(created_date_parsed) ~ NA_integer_,
+        month(created_date_parsed) >= 10 ~ year(created_date_parsed) + 1,
+        month(created_date_parsed) < 10 ~ year(created_date_parsed),
+        .default = NA_integer_
+      ),
+      schooljaar_afgeleid_startmoment = case_when(
+        is.na(startmoment) ~ NA_integer_,
+        month(startmoment) >= 8 ~ year(startmoment),
+        month(startmoment) < 8 ~ year(startmoment) - 1,
+        .default = NA_integer_
+      )
+    )
 
-    # For each week, build running totals
-    for (i in 1:length(all_weeks)) {
-        week <- all_weeks[i]
+  # Final derivation with complex logic
+  data_with_conclusion <- data_with_derived |>
+    mutate(
+      schooljaar = as.integer(as.character(schooljaar)),
+      schooljaar_afgeleid = case_when(
+        # Everything matches
+        schooljaar == schooljaar_afgeleid_startmoment &
+          schooljaar == schooljaar_afgeleid_created ~ schooljaar,
 
-        # Start with previous week's counts
-        if (i > 1) {
-            status_counts[i,] <- status_counts[i-1,]
-        }
+        # If schooljaar is 0, use created_date derivation
+        schooljaar == 0 ~ schooljaar_afgeleid_created,
 
-        # Add new entries
-        week_new <- new_status_by_week %>%
-            filter(academic_week == week)
+        # Early registration in august or september
+        schooljaar == schooljaar_afgeleid_startmoment &
+          schooljaar_afgeleid_created == schooljaar - 1 &
+          month(created_date_parsed) %in% c(8,9) ~ schooljaar,
 
-        for (j in 1:nrow(week_new)) {
-            status <- week_new$status_category[j]
-            if (!is.na(status) && length(status) > 0 && status %in% colnames(status_counts)) {
-                status_counts[i, status] <- status_counts[i, status] + week_new$count[j]
-            }
-        }
+        # Late registration on October 1st
+        schooljaar == schooljaar_afgeleid_startmoment &
+          schooljaar_afgeleid_created == schooljaar + 1 &
+          month(created_date_parsed) == 10 &
+          day(created_date_parsed) == 1 ~ schooljaar,
 
-        # Apply transitions
-        week_transitions <- status_transitions %>%
-            filter(academic_week == week)
+        # Late enrollment
+        schooljaar == schooljaar_afgeleid_startmoment &
+          schooljaar_afgeleid_created == schooljaar + 1 &
+          created_date_parsed < startmoment ~ schooljaar,
 
-        for (j in 1:nrow(week_transitions)) {
-            from_status <- week_transitions$prev_status[j]
-            trans_count <- week_transitions$transition_count[j]
+        # Registration on Oct 1 year later where created counts 2 years
+        schooljaar == schooljaar_afgeleid_startmoment &
+          schooljaar_afgeleid_created > schooljaar + 1 &
+          month(created_date_parsed) == 10 &
+          day(created_date_parsed) == 1 ~ schooljaar_afgeleid_created - 1,
 
-            # Check if from_status is not empty and exists in matrix
-            if (!is.na(from_status) && length(from_status) > 0 && from_status %in% colnames(status_counts)) {
-                status_counts[i, from_status] <- status_counts[i, from_status] - trans_count
-            }
-        }
+        # For other cases, use created_date derivation
+        schooljaar_afgeleid_created > schooljaar ~ schooljaar_afgeleid_created,
 
-        # Add to results
-        for (status in all_statuses) {
-            result <- rbind(result, data.frame(
-                academic_week = week,
-                status_category = status,
-                count = status_counts[i, status]
-            ))
-        }
-    }
+        .default = schooljaar
+      )
+    )
 
-    # Add month information and percentages
-    result <- result %>%
-        left_join(
-            new_status_by_week %>%
-                select(academic_week, academic_month) %>%
-                distinct(),
-            by = "academic_week"
-        )
-
-    # Calculate percentages
-    week_totals <- result %>%
-        group_by(academic_week) %>%
-        summarise(total = sum(count), .groups = "drop")
-
-    result %>%
-        left_join(week_totals, by = "academic_week") %>%
-        mutate(percentage = count / total * 100)
+  return(data_with_conclusion)
 }
+
+
+#' Add Student Context Per Row
+#'
+#' @description
+#' Adds contextual information per row about student's other applications and status progression.
+#' Unlike group_applications, this function keeps all rows and adds group_id and context columns.
+#'
+#' @param data Applications dataset
+#' @return Data with added context columns per row
+#'
+#' @importFrom dplyr mutate group_by ungroup row_number case_when arrange lag lead cur_group_id n_distinct select first
+#' @importFrom purrr pmap_dbl
+#'
+#' @export
+add_student_context_per_row <- function(data) {
+
+  # Add group_id (unique identifier for each student-year-program-institution combination)
+  data_with_group_id <- data |>
+    group_by(bsnhash, schooljaar, opleidingcode, instellingserkenningscode) |>
+    mutate(group_id = cur_group_id()) |>
+    ungroup()
+
+  # For each row, determine student's other applications at that point in time
+  data_with_context <- data_with_group_id |>
+    group_by(group_id) |>
+    arrange(begindatum_parsed) |>
+    mutate(
+      # Track status progression within this application
+      prev_status = lag(status),
+      is_status_upgrade = case_when(
+        is.na(prev_status) ~ TRUE,  # First status is always considered an upgrade
+        status_numeric > lag(status_numeric) ~ TRUE,
+        TRUE ~ FALSE
+      ),
+      # Calculate days since first application in this group
+      days_since_first_application = as.numeric(begindatum_parsed - min(begindatum_parsed, na.rm = TRUE))
+    ) |>
+    ungroup()
+
+  # Now add context about other applications at the time of each row
+  data_final <- data_with_context |>
+    group_by(bsnhash, schooljaar) |>
+    arrange(begindatum_parsed) |>
+    mutate(
+      # Count total applications for this student-year at this point
+      applications_so_far = row_number(),
+
+      # For each row, find what other applications exist at this time
+      student_other_applications_exist = n_distinct(group_id) > 1,
+
+      # Find current maximum status across all applications for this student-year
+      student_max_status_numeric = {
+        # For each row, we need the max status up to that point in time
+        pmap_dbl(list(begindatum_parsed), function(current_date) {
+          same_student <- bsnhash == first(bsnhash) & schooljaar == first(schooljaar)
+          up_to_date <- begindatum_parsed <= current_date
+          eligible_statuses <- status_numeric[same_student & up_to_date]
+          if (length(eligible_statuses) > 0) max(eligible_statuses) else 0
+        })
+      },
+
+      # Check if this row's status equals the student's max status at this time
+      student_is_max_status = status_numeric == student_max_status_numeric
+    ) |>
+    ungroup() |>
+    # Clean up temporary columns
+    select(-status_numeric, -prev_status, -is_status_upgrade)
+
+  return(data_final)
+}
+
