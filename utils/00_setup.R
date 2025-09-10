@@ -4,10 +4,10 @@
 }
 
 # Functions ran before the packages are loaded
-source("utils/dev_functions_base.R")
+source("utils/dev_functions.R")
 
 # Other functions
-source("utils/dev_functions.R")
+#source("utils/dev_functions.R")
 
 platform <- get_platform()
 

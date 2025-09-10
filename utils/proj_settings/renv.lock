@@ -4,7 +4,7 @@
     "Repositories": [
       {
         "Name": "CRAN",
-        "URL": "https://packagemanager.posit.co/cran/latest"
+        "URL": "https://cloud.r-project.org"
       }
     ]
   },
@@ -1585,7 +1585,7 @@
     },
     "quarto": {
       "Package": "quarto",
-      "Version": "1.5.0",
+      "Version": "1.5.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -1605,7 +1605,7 @@
         "xfun",
         "yaml"
       ],
-      "Hash": "2e3c725ab940c0fc720ca9f66c6bff44"
+      "Hash": "c948476ae43811c74888f0d4534832a3"
     },
     "ragg": {
       "Package": "ragg",
