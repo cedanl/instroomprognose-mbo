@@ -6,7 +6,7 @@ format: html
 ## Data inladen
 
 ```{r}
-applications <- safe_read_csv("data/cambo/aanmeldingen_oktober_2024.csv", 
+applications <- safe_read_csv("data/01_raw/aanmeldingen_oktober_2024.csv", 
                       delim = ",",
                       col_types = cols(.default = col_guess()))
 ```
@@ -44,7 +44,7 @@ applications_filtered_location_shuffled <- shuffle_group_combinations(applicatio
 program_vars <- c("opleidingcode", "leertrajectmbo", "leeftijdscategorie")
 
 # Shuffle the program variables while preserving structure
-applications_filtered_all_shuffled <- shuffle_group_combinations(df_location_shuffled, "bsnhash", program_vars)
+applications_filtered_all_shuffled <- shuffle_group_combinations(applications_filtered_location_shuffled, "bsnhash", program_vars)
 
 # The final dataframe (df_final) now has both sets of variables shuffled
 # while preserving the structure for each bsnhash
@@ -54,7 +54,16 @@ applications_filtered_all_shuffled <- shuffle_group_combinations(df_location_shu
 ```{r}
 
 # save synthetic data as csv with , as delimiter to data/synthetic with aanmeldingen_oktober_2024_synthetic.csv as filename
-write_csv(applications_filtered_all_shuffled, "data/synthetic/aanmeldingen_oktober_2024_synthetic.csv")
+write_csv(applications_filtered_all_shuffled, "data/01_raw/aanmeldingen_oktober_2024_DEMO.csv")
+
+# Create summary statistics CSV
+summary_stats <- applications_filtered_all_shuffled %>%
+    filter(status == "ENROLLED") %>%
+    group_by(schooljaar, leertrajectmbo, instellingserkenningscode, opleidingcode) %>%
+    summarise(aantal = n(), .groups = "drop") %>%
+    arrange(schooljaar, instellingserkenningscode, leertrajectmbo, opleidingcode)
+
+write_csv(summary_stats, "data/01_raw/inschrijvingen_summary_DEMO.csv")
 
 ```
 
