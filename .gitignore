@@ -82,6 +82,7 @@ rsconnect/
 analysis/*_files/
 /*_cache/
 analysis/*_cache/
+analysis/_freeze/
 *_cache
 *.pdf
 *.html
@@ -91,3 +92,6 @@ analysis/*_cache/
 inst/*/rsconnect/
 inst/*/dev/
 inst/*/data-raw/
+
+# files for development
+CLAUDE.md

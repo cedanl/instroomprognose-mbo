@@ -7,8 +7,14 @@ cambo:
   suffix: ""
   applications_filename: "aanmeldingen_oktober_2024.csv"
 
+all:
+  inherits: "default"
+  prepare: false
+  year: 2024
+
+# korte verwijzing naar instelling zonder spaties
 mboa:
-  # dat is demo modus, "cambo" gebruikt echte data
+  # "default" is de demo modus, "cambo" gebruikt echte data
   inherits: "default"
   # of de data_preparation opnieuw moet draaien. Als bestanden ontbreken, dan wordt dit automatisch gedaan
   prepare: false
@@ -18,14 +24,4 @@ mboa:
   school_name: "MBO Amersfoort"
   # 2023 of 2024
   year: 2024
-  # "overall" of "related brins""
-  benchmark: "overall"
-  # leeg betekent dynamisch, maar je kunt hier ook een lijst van brins zetten. Alleen de eerste 3 worden gebruikt
-  related_brins: []
 
-all:
-  inherits: "default"
-  prepare: false
-  year: 2024
-  benchmark: "related brins"
-  related_brins: []

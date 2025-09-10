@@ -1,12 +1,12 @@
 ---
-title: "Instroomanalyse `r params$school_name` (`r params$brin_code`)"
+title: "Instroomanalyse `r params$school_name` `r params$year` (`r params$brin_code`)"
 subtitle: "Data kwaliteit en conversie analyse"
 author: "Corneel den Hartogh"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 params:
   brin_code: "30RR"
   school_name: "MBO Amersfoort"
-  years: [2023, 2024]
+  year: 2024
 format: 
   html:
     toc: true
@@ -29,9 +29,6 @@ execute:
 
 # Load pipeline functions
 source("utils/00_setup.R")
-source("R/data_preparation.R")
-source("R/descriptive_analysis.R")
-source("R/data_quality.R")
 
 # Set default params if not available (for testing)
 if (!exists("params")) {
@@ -39,7 +36,7 @@ if (!exists("params")) {
     brin_code = "30RR",
     school_name = "MBO Amersfoort", 
     comparison_mode = "relative_to_average",
-    years = c(2023, 2024)
+    year = 2024
   )
 }
 
@@ -47,7 +44,7 @@ if (!exists("params")) {
 
 ## Executive Summary
 
-Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school_name`** (BRIN: `r params$brin_code`) voor de schooljaren `r paste(params$years, collapse = " en ")`.
+Deze analyse toont de instroompatronen en data kwaliteit voor **`r params$school_name`** (BRIN: `r params$brin_code`) voor de schooljaren `r paste(params$year, collapse = " en ")`.
 
 ```{r}
 #| label: load-data-full-dataset
@@ -124,7 +121,7 @@ basic_stats <- data.frame(
 gt(basic_stats) %>%
   tab_header(
     title = paste("Basis Statistieken:", params$school_name),
-    subtitle = paste("Schooljaren", paste(params$years, collapse = " en "))
+    subtitle = paste("Schooljaren", params$year)
   ) %>%
   cols_label(
     Metriek = "Metriek",
@@ -765,11 +762,9 @@ Deze sectie analyseert hoe de status van aanmeldingen verandert gedurende het sc
 ```{r}
 #| label: status-transitions-analysis
 
-# Analyze status transitions for the most recent year
-recent_year <- max(params$years)
-status_analysis <- analyze_status_transitions(institution_data, target_year = recent_year)
+status_analysis <- analyze_status_transitions(institution_data, target_year = params$year)
 
-cat("Analyse van status overgangen voor schooljaar", recent_year, "\n")
+cat("Analyse van status overgangen voor schooljaar", params$year, "\n")
 
 ```
 
@@ -794,7 +789,7 @@ if (nrow(status_analysis$result) > 0) {
   # Plot stacked area chart
   ggplot(status_analysis$result, 
        aes(x = academic_week, y = count, 
-           fill = status_category, group = status_category)) +
+           fill = status_proper_case, group = status_proper_case)) +
     geom_area(position = "stack", alpha = 0.8) +
     scale_fill_manual(values = status_colors) +
     theme_minimal() +
@@ -834,7 +829,7 @@ institution_data <- institution_data %>% mutate(postcodecijfers = as.numeric(pos
 postcode_data <- calculate_market_share_by_postcode(
     institution_data, 
     institution_name = params$school_name,
-    years = params$years
+    year = params$year
 )
 
 # Summary statistics
@@ -851,7 +846,7 @@ postcode_summary <- postcode_data %>%
 
 cat("Geografische analyse voor", params$school_name, "\n")
 cat("Aantal postcodes in analyse:", nrow(postcode_data), "\n")
-cat("Schooljaren:", paste(unique(postcode_data$schooljaar), collapse = ", "), "\n")
+cat("Schooljaar:", paste(unique(postcode_data$schooljaar), collapse = ", "), "\n")
 
 ```
 
@@ -1182,12 +1177,12 @@ if (student_count > 500) {
 # Multiple applications conclusion
 if (exists("institution_multiple_patterns") && "conversion_by_pattern" %in% names(institution_multiple_patterns)) {
   single_app_pct <- institution_multiple_patterns$conversion_by_pattern %>%
-    filter(pattern_type == "Slechts één aanmelding") %>%
+    filter(pattern_type == "Slechts 1 aanmelding") %>%
     pull(conversion_rate) %>%
     mean()
   
   multiple_app_pct <- institution_multiple_patterns$conversion_by_pattern %>%
-    filter(pattern_type != "Slechts één aanmelding") %>%
+    filter(pattern_type != "Slechts 1 aanmelding") %>%
     pull(conversion_rate) %>%
     mean()
   

@@ -1,0 +1,280 @@
+---
+title: "MBO Instroomprognose"
+subtitle: "Geautomatiseerde analyse van aanmeldings- en instroomdata"
+author: "CEDA"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+editor: source
+format: 
+  html:
+    toc: true
+    toc-title: Inhoudsopgave
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Laat code zien"
+execute:
+  cache: false
+  freeze: false
+  include: true
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| cache: false
+#| output: false
+#| include: false
+#| freeze: false
+
+# Load pipeline functions
+source("utils/00_setup.R")
+
+```
+
+## Vooraf
+
+In dit project worden CAMBO aanmeldingsdata opgehaald, bewerkt en geanalyseerd voor MBO instellingen. De pipeline genereert gedetailleerde rapporten per instelling met analyses van instroompatronen, data kwaliteit, conversies en geografische spreiding.
+
+### 1. Configuratie instellen
+
+Voor het gebruik van de demo data hoeft niets aangepast te worden. Om je eigen instellingsdata te gebruiken, moet eerst het `config.yml` bestand worden aangepast.
+
+### 2. Bekijk config.yml bestand
+
+Standaard wordt config.yml geopend. Als dat niet is gebeurd, voer dan **`open_config()`** uit in de <u>R console</u>.
+
+### 3. Gebruik data eigen instelling
+
+Volg deze stappen om je eigen instelling toe te voegen:
+
+- Zorg ervoor dat je **toegang** hebt tot de CAMBO data bestanden in CSV formaat
+
+Pas het volgende aan in de config.yml:
+
+- **Nieuwe configuratie**: Kopieer de "mboa:" sectie en geef deze een nieuwe korte naam zonder spaties
+- **inherits** Kies "default" voor demo data of "cambo" voor productie data
+- **prepare**: Zet op "true" als basis data preparatie opnieuw moet worden gedaan, bijvoorbeeld omdat je code hebt aangepast.
+- **brin**: Voer je officiële BRIN code in, bijvoorbeeld "30RR". Run `instellingen <- get_institutions()` in de console en vervolgens `View(instellingen)` om je BRIN code te vinden.)
+- **school_name**: Vervang met de volledige naam van je instelling zoals je wilt dat deze in rapporten verschijnt
+- **year**: Kies het jaar voor analyse (2023 of 2024)
+<u><p>Druk op</u>: 💾 om het bestand op te slaan</p>
+
+### 4. Keuze configuratie activeren
+
+Kies onderstaand welke configuratie je wilt gebruiken. Pas dit aan naar de zojuist gekozen naam om ook van deze instellingen gebruik te maken.
+
+```{r}
+#| code-fold: false
+
+# Demo data (synthetische data)
+Sys.setenv(R_CONFIG_ACTIVE = "mboa")
+
+# MBO Amersfoort (voorbeeld instelling)
+# Sys.setenv(R_CONFIG_ACTIVE = "mboa") 
+
+# CAMBO productie data (alle instellingen)
+# Sys.setenv(R_CONFIG_ACTIVE = "cambo")
+
+# Je eigen instelling (vervang met je configuratie naam)
+# Sys.setenv(R_CONFIG_ACTIVE = "jouw_instelling")
+```
+
+**Let op!** Verwijder de `#` voor de regel die je wilt activeren en plaats `#` voor de regels die je wilt uitschakelen.
+
+---
+
+## Pipeline Uitvoering
+
+Nu gaan we de automatische pipeline uitvoeren:
+
+```{r}
+#| label: load-config
+
+# Laad de actieve configuratie
+active_config <- Sys.getenv("R_CONFIG_ACTIVE", "default")
+config_settings <- config::get()
+
+cat("🔧 Actieve configuratie:", active_config, "\n")
+
+if (!is.null(config_settings$school_name)) {
+  cat("🏫 Instelling:", config_settings$school_name, "\n")
+}
+
+if (!is.null(config_settings$brin)) {
+  cat("🏛️ BRIN code:", config_settings$brin, "\n")
+}
+
+# Valideer configuratie
+cat("\n🔍 Configuratie validatie...\n")
+validate_config(config_settings)
+```
+
+### Stap 1: Data Preparatie Controle
+
+```{r}
+#| label: check-prepared-data
+
+# Check of prepared data bestaat
+prepared_dir <- "data/02_prepared"
+prepared_files <- c(
+  paste0("applications_enriched_with_quality", config_settings$suffix, ".csv"),
+  paste0("applications_enriched_with_context", config_settings$suffix, ".csv")
+)
+
+files_exist <- file.exists(file.path(prepared_dir, prepared_files))
+
+cat("📊 Controle prepared data bestanden:\n")
+for (i in seq_along(prepared_files)) {
+  status <- if(files_exist[i]) "✅ Bestaat" else "❌ Ontbreekt"
+  cat("-", prepared_files[i], ":", status, "\n")
+}
+
+cat("\n🔄 Force prepare ingesteld op:", config_settings$prepare, "\n")
+
+need_preparation <- !all(files_exist) || config_settings$prepare
+
+if (need_preparation == FALSE) {
+    cat("\n✅ Alle prepared data bestanden zijn aanwezig en preparatie is niet geforceerd\n")
+  
+} else {
+    cat("\n🚀 Data preparatie is vereist - wordt uitgevoerd...\n")
+    
+    tryCatch({
+        # Render the data preparation notebook
+        quarto_render(input = "analysis/data_preparation.qmd", quiet = FALSE)
+        
+        cat("\n✅ Data preparatie succesvol voltooid!\n")
+        
+        # Verify files were created
+        files_created <- file.exists(file.path(prepared_dir, prepared_files))
+        if (all(files_created)) {
+            cat("✅ Alle benodigde bestanden zijn aangemaakt\n")
+        } else {
+            warning("⚠️ Niet alle bestanden zijn succesvol aangemaakt")
+        }
+        
+    }, error = function(e) {
+        cat("❌ Fout bij data preparatie:", e$message, "\n")
+        stop("Data preparatie gefaald - kan niet doorgaan met analyse")
+    })
+}
+
+
+```
+
+
+### Stap 2: Instellingsanalyse Uitvoeren
+
+```{r}
+#| label: run-institution-analysis
+
+cat("🏫 Uitvoeren van instellingsanalyse...\n\n")
+
+# Bepaal welke instelling(en) te analyseren
+if (active_config == "all") {
+  # Analyseer alle instellingen
+  cat("📊 Mode: Alle instellingen analyseren\n")
+  
+  tryCatch({
+    render_multiple_institution_reports(
+      mode = "all",
+      years = c(2023, 2024),
+      config_env = active_config
+    )
+    
+    cat("\n✅ Alle instellingsrapporten succesvol gegenereerd!\n")
+    cat("📂 Rapporten zijn beschikbaar in: output/institution_reports/\n")
+    
+  }, error = function(e) {
+    cat("❌ Fout bij genereren van alle rapporten:", e$message, "\n")
+  })
+  
+} else if (!is.null(config_settings$brin)) {
+  # Analyseer specifieke instelling
+  brin_code <- config_settings$brin
+  school_name <- config_settings$school_name
+  target_year <- config_settings$year %||% 2024
+  
+  cat("📊 Mode: Specifieke instelling analyseren\n")
+  cat("🏛️ BRIN:", brin_code, "\n")
+  cat("🏫 Instelling:", school_name, "\n")
+  cat("📅 Jaar:", target_year, "\n\n")
+  
+  tryCatch({
+    success <- render_institution_report(
+      brin_code = brin_code,
+      school_name = school_name,
+      year = c(target_year)
+    )
+    
+    if (success) {
+      cat("\n✅ Instellingsrapport succesvol gegenereerd!\n")
+      cat("📂 Rapport is beschikbaar in: output/institution_reports/\n")
+    } else {
+      cat("\n❌ Fout bij genereren van instellingsrapport\n")
+    }
+    
+  }, error = function(e) {
+    cat("❌ Fout bij genereren van instellingsrapport:", e$message, "\n")
+  })
+  
+} else {
+  cat("ℹ️ Demo mode - geen specifieke instellingsanalyse uitgevoerd\n")
+  cat("💡 Om een instellingsrapport te genereren:\n")
+  cat("   1. Configureer een instelling in config.yml\n")  
+  cat("   2. Stel de juiste R_CONFIG_ACTIVE in\n")
+  cat("   3. Run deze pipeline opnieuw\n")
+}
+```
+
+### Stap 4: Resultaten Overzicht
+
+```{r}
+#| label: setup-summary-vars
+#| include: false
+
+# Bereken alle waarden eerst
+output_dir <- "output/institution_reports"
+reports_exist <- dir.exists(output_dir)
+reports <- if(reports_exist) list.files(output_dir, pattern = "*.html", recursive = TRUE) else character(0)
+num_reports <- length(reports)
+data_quality_status <- if(all(files_exist)) "excellent" else "needs_attention"
+completion_time <- format(Sys.time(), "%d %B %Y om %H:%M")
+```
+
+## 📋 Pipeline Samenvatting
+
+De data pipeline is succesvol uitgevoerd met configuratie **`r active_config`**. 
+`r if(need_preparation) "De data preparatie stap werd uitgevoerd" else "De data preparatie werd overgeslagen omdat alle bestanden al aanwezig waren"`.
+
+### 📊 Resultaten
+
+`r if(reports_exist && num_reports > 0) paste0("Er zijn **", num_reports, " rapporten** gegenereerd en opgeslagen in de output directory.") else "Er werden geen rapporten gevonden in de output directory."`
+
+`r if(num_reports > 0) paste0("De beschikbare rapporten zijn:\n\n", paste0("- ", head(reports, 5), collapse = "\n"), if(num_reports > 5) paste0("\n- ... en nog ", num_reports - 5, " andere rapporten") else "")`
+
+### ✅ Data Kwaliteit
+
+`r if(data_quality_status == "excellent") "Alle prepared bestanden zijn aanwezig en de data kwaliteit is uitstekend." else "⚠️ Sommige prepared bestanden ontbreken - controleer de data preparatie stap."`
+
+### 🎯 Volgende Stappen
+
+Nu de pipeline is voltooid, kun je:
+
+1. **Rapporten bekijken**: Open de gegenereerde rapporten in `output/institution_reports/`
+2. **Data analyseren**: Controleer de data kwaliteit en conversie analyses  
+3. **Strategische beslissingen**: Gebruik de inzichten voor strategische besluitvorming
+4. **Herhaling**: Voer de analyse opnieuw uit met nieuwe data indien gewenst
+
+---
+
+*Pipeline voltooid op `r completion_time`* ✨
+
+---
+
+### Support
+
+Voor verdere ondersteuning:
+- Neem contact op met het CEDA team
+
+---
+

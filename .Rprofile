@@ -40,7 +40,7 @@ if (interactive() && file.exists("utils/00_setup.R")) {
       #to verify if this works in VS Code / Positron etc
       if (rstudioapi::isAvailable()) {
         rstudioapi::navigateToFile("config.yml")
-        rstudioapi::navigateToFile("instelling_analysis.qmd")
+        rstudioapi::navigateToFile("instroomprognose.qmd")
       }
 
       rm(list = ls())

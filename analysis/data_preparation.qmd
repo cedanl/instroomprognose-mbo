@@ -261,7 +261,7 @@ Er zijn nu twee datasets beschikbaar:
 
 1. **applications_enriched_with_context.csv**: Alle originele rijen behouden, met toegevoegde context per rij over de student (ook obv van informatie van aanmeldingen buiten instelling)
    - Aantal rijen: `r nrow(applications_enriched_with_context)`
-   - Gebruik voor: benchmarking en vergelijking tussen instellingen
+   - Gebruik voor: aanvullende inzichten voor studenten die aanmeldingen bij meerdere instellingen hebben
 
 
 Deze datasets kunnen nu gebruikt worden in verdere analyses zonder dat de data preparatie stappen herhaald hoeven te worden.
