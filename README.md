@@ -1,94 +1,144 @@
-<p align="center"><img src="src/assets/p3_logo.png" alt="Instroomanalyse MBO"></p> <h1 align="center">Instroomanalyse CAMBO</h1> <div align="center"> <strong>🚀  🛠️</strong> <br> Een aanpasbare analyse en demo repository ondersteund door LLMs. <br> <sub>Gebaseerd op het R P3 Template, ideaal voor data-analisten, onderzoekers en developers op zoek naar gestandaardiseerde structuur</sub> 
+# 📊 Instroomprognose MBO Package
 
-</div>
+Een R package voor de analyse van MBO instroomdata met geautomatiseerde rapportage en data kwaliteitscontroles.
 
+## 🎯 Overzicht
 
-## 📋 Table of Contents
+Dit package biedt een complete pipeline voor het analyseren van CAMBO aanmeldingsdata van MBO instellingen. Het genereert gedetailleerde rapporten over instroompatronen, conversieratio's, data kwaliteit en geografische spreiding.
 
-- [Motivation](#-motivation)
-- [What P3 Stans For](#-what-p3-stands-for)
-- [Quick Start](#-quick-start)
-- [Features](#-features)
-- [Project Structure](#-project-structure)
-- [Contributing](#-contributing)
-- [License](#-license)
-- [Additional Resources](#-additional-resources)
+### Belangrijkste functionaliteiten:
 
+-   📥 **Data preparatie** inladen en verrijken met afgeleide variabelen en referentiedata
+-   📈 **Instroomanalyse** per instelling met trends en patronen
+-   📊 **Data kwaliteit** controles en validatie
+-   🗺️ **Geografische analyse** van studentenherkomst
+-   📋 **Status transitie** analyse van aanmeldingen tot inschrijvingen
+-   🔄 **Meervoudige aanmeldingen** analyse
+-   📑 **Geautomatiseerde rapportage** in HTML formaat
 
-## 💡 Motivation
+## 🚀 Snelstart
 
-The P3 Template addresses common challenges in R project start-up, organization and reproducibility. It provides a standardized structure that:
-- Enables secure and high-performance LLM-usage from the IDE.
-- Improves project maintainability
-- Streamlines the transition from explorative analysis to final presentation
+### 1. Installatie
 
-### What P3 Stands For:
+Clone het project
 
-- Project: A complete, well-organized codebase with good practices incorporated
-- Process: A way-of-work and guide to help you being more productive
-- Presentation: Professional, adaptable and beautiful outputs
-
-## 🚀 Quick Start
-
-1. Ensure you have R (>= 4.0.0) and RStudio installed.
-
-2. Click "Code" in the top right corner
-3. Clone this repository with git or git clients like Github Desktop or Smartgit, or download as zip.
-4. Open the project in RStudio and run the setup script by clicking Enter:
-```
-Setup script detected. Run 00_setup.R? (press ENTER to run, ESC to skip): 
-```
-5. Depending on your local R packages, this may take a few minutes.
-6. Run the exploratory analysis by opening instroomprognose_prototype.qmd and click Render
-7. Investigate the report in html or pdf
-
-### Troubleshooting:
-- If you encounter package installation issues, try updating R and RStudio to their latest versions.
-- For renv-related problems, refer to the [renv documentation](https://rstudio.github.io/renv/articles/renv.html).
-
-## 📁 Project Structure
-
-🚧 The P3 Template follows a well-organized directory structure to enhance productivity and maintainability. Here's an overview of the key directories: 
-
-```
-project-root/
-├── data/
-│   └── synthetic/                   # Synthetic data for testing and examples
-│   └── reference/       
-│   └── metadata/      
-├── man/                             # Auto-generated documentation
-├── R/                               # R functions and scripts
-└── utils/               
-    ├── pal_prompts/     
-├── instroomprognose_prototype.qmd   # The analysis file that demonstrates functionality
-├── 00_set_up.R                      # Load packages and user settings
-├── config.yml                       # Configuration settings, like references to data
-├── CLAUDE.md                        # Instructions that help LLMs to support you
-
+```         
+git clone https://github.com/cedanl/instroomprognose-mbo
 ```
 
-## 🤝 Contributing
+Open het project in RStudio Het setup script wordt automatisch gedetecteerd, druk op enter om dit runnen. Dit installeert ondersteunde packages.
 
-- Thanks to [Npuls](https://npuls.nl/) for providing the opportunity to develop this package
-- Thank you to CEDA-colleagues for stimulating conversations and feedback Bram, Tomer, Amir, Tony, Theo, Ash, Steven, Caspar, Shirley and Martine
-- Thanks to SURF Developer Program for sparking interest in templates
+### 2. Configuratie
 
+Open configuratie bestand Dit gaat automatisch, run anders:
 
-Contribute as well! Please see our Contributing Guide for details. 
+``` r
+open_config()
+```
 
-Key ways to contribute:
+Het `config.yml` bestand bevat alle belangrijke instellingen:
 
-- Report bugs or suggest features by opening an issue
-- Submit pull requests for bug fixes or new features
-- Improve documentation or add usage examples
+-   **inherits**: `"default"` voor demo data, `"cambo"` voor echte data, die moet je wel zelf toevoegen aan `"data/01_raw"`
+-   **prepare**: `true` om data preparatie opnieuw uit te voeren, `false` om bestaande voorbereide data te gebruiken (indien aanwezig)
+-   **brin**: Officiële BRIN code van je instelling
+-   **school_name**: Naam zoals deze in rapporten moet verschijnen
+-   **year**: Analysejaar (2023 of 2024 momenteel)
 
+### 3. Pipeline uitvoeren
 
-## 📄 License
+Open het hoofdrapport instroomprognose.qmd is als het goed is ook al geopend. Open dit anders handmatig. Loop en stapsgewijs doorheen en run de code blocks of render het bestand.
 
-This project is licensed under the [Apache License](LICENSE.md).
+## 📁 Projectstructuur
 
-## 📚 Additional Resources
+```         
+instroomprognose-mbo-test/
+├── instroomprognose.qmd            # Hoofd rapport wat uitlegt hoe je stapsgewijs analyses genereert
+├── config.yml                      # Configuratie instellingen (pas aan voor eigen instelling / voorkeuren)
+├── data/                           # Data directories
+│   ├── 01_raw/                     # Zet hier ruwe CAMBO data neer (demo-bestanden aanwezig)
+│   ├── 02_prepared/                # Bewerkte data
+│   └── reference/                  # Referentiebestanden
+├── output/                         # Gegenereerde rapporten
+├── analysis/                       # Analyse bestanden
+│   └── data_preparation.qmd        # Data preparatie workflow op volledig bronbestand
+│   ├── instelling_analysis.qmd     # Template voor instellingsrapport
+├── R/                              # R functies die worden gebruikt in de analyses
+├── utils/                          # Utilities en setup
+```
 
-- See P3 Template
-- Stuff regarding CAMBO
+## 📊 Rapportage
 
+Het package genereert verschillende soorten rapporten:
+
+### Hoofd Pipeline Rapport (`instroomprognose.qmd`)
+
+-   Overzicht van gehele pipeline en uitvoer
+-   Configuratie validatie
+-   Data preparatie controle
+-   Trigger om rapport te genereren
+
+### Data preparatie (`analysis/data_preparation.qmd`)
+
+-   Data inladen vanuit `data/01_raw/`
+-   Data verrijken met brin en opleidingsvariabelen
+-   Data kwaliteit checks en meer afgeleide verrijkingen, zoals nieuw schooljaar variabele maken en datum velden
+-   Nieuwe kolommen obv andere aanmeldingen van student op dat moment om indicatie te geven van meervoudige aanmeldingen
+-   Opslaan van voorbereide data in `data/02_prepared/`
+
+### Instellingsrapporten (`analysis/instelling_analysis.qmd`)
+
+-   Executive summary
+-   Data kwaliteit analyse
+-   Instroompatronen en trends
+-   Geografische spreiding
+-   Aanmelding timing analyse
+-   Status transitie overzicht
+-   Meervoudige aanmeldingen analyse
+-   Conclusies en aanbevelingen
+
+## 🤝 Bijdragen
+
+Contributions zijn welkom! Dit kan door middel van github issues, ceda mailen ([ceda@npuls.nl](mailto:ceda@npuls)) of via pull requests.
+
+Dat laatste is meer geavanceerd, zie daarvoor de volgende tips. Mocht je hier mee aan de gang willen, laat het dan vooral weten dan kijken we mee!
+
+### Development workflow:
+
+1.  Fork het project
+2.  Maak een feature branch (`git checkout -b feature/nieuwe-functie`)\
+3.  Commit je wijzigingen (`git commit -m 'feat: nieuwe functie toegevoegd'`)
+4.  Push naar de branch (`git push origin feature/nieuwe-functie`)
+5.  Open een Pull Request
+
+### Code Style Guidelines
+
+-   Gebruik `snake_case` voor functie en variabele namen
+-   Documenteer alle functies met roxygen2
+-   Gebruik `|>` pipeline operator
+-   4 spaties indentatie
+-   Plaats imports bovenaan met `@importFrom` tags
+
+### Git Commit Conventies:
+
+-   `feat:` nieuwe functionaliteit
+-   `fix:` bug fixes
+-   `docs:` documentatie wijzigingen
+-   `chore:` herstructuren van code (verplaatsen, uitgebreid refactoren)
+-   `test:` toevoegen of wijzigen van tests
+-   `style:` voor code / comments aanpassen zonder functionele wijzigingen
+-   `remove:` voor het verwijderen van code/bestanden
+-   `data:` voor data wijzigingen
+
+## 📄 Licentie
+
+Dit project valt onder de Apache Licentie - zie het [LICENSE](LICENSE) bestand voor details.
+
+## 🙏 Acknowledgments
+
+-   **CEDA Team** voor feedback en ontwikkelingsondersteuning
+-   **Inge Meere** van MBO Koppelpunt / CAMBO, voor meedenken over data en duiding behoefte
+-   **MBO instellingen** voor eerdere input bij sessies in voorjaar 2025
+-   **R Community** voor de geweldige packages en tools
+-   **Quarto** voor het uitstekende rapportage framework
+
+------------------------------------------------------------------------
