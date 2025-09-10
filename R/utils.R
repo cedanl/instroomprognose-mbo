@@ -40,6 +40,7 @@ get_institutions <- function() {
 #' @param brin_code BRIN code of the institution
 #' @param school_name Name of the school
 #' @param year Numeric value of year to analyze
+#' @param suffix Optional suffix for the output filename
 #' @param input_file_path File path to the Quarto input file
 #' @param output_base_dir_relative directory for output files, relative to the input path
 #'
@@ -53,6 +54,7 @@ render_institution_report <- function(
         brin_code,
         school_name,
         year = 2024,
+        suffix = "",
         input_file_path = "analysis/instelling_analysis.qmd",
         output_base_dir_relative = "../output"
 ) {
@@ -62,14 +64,14 @@ render_institution_report <- function(
     safe_school_name <- str_replace(school_name, "\\s+", "_")
 
     # Create output directory for this institution
-    output_full_dir <- file.path(output_base_dir_relative, paste0(brin_code, "_", safe_school_name), year)
+    output_full_dir <- file.path(output_base_dir_relative, paste0(brin_code, "_", safe_school_name, suffix), year)
 
     if (!dir.exists(output_full_dir)) {
         dir.create(output_full_dir, recursive = TRUE)
         cat("Created directory:", output_full_dir, "\n")
     }
 
-    output_file <- "Instroomanalyse.html"
+    output_file <- paste0("Instroomanalyse", suffix, ".html")
 
     cat("Rendering report for:", school_name, "(", brin_code, ")\n")
     cat("Output file:", output_file, "\n")
@@ -85,7 +87,8 @@ render_institution_report <- function(
             execute_params = list(
                 brin_code = "30RR",
                 school_name = "MBO Amersfoort",
-                year = 2024
+                year = 2024,
+                suffix = suffix
             ),
             quiet = FALSE
         )
@@ -104,17 +107,18 @@ render_institution_report <- function(
 #' @param mode Character: "specific" or "all"
 #' @param brin_codes Vector of specific BRIN codes (when mode = "specific")
 #' @param year Numeric value of year to analyze
+#' @param suffix Optional suffix for the output filenames
 #'
 #' @return NULL
 #'
 #' @importFrom dplyr filter
 #'
-#'
 #' @export
 render_multiple_institution_reports <- function(
         mode = "all",
         brin_codes = NULL,
-        year = 2024
+        year = 2024,
+        suffix = ""
 ) {
 
     cat("=== Institution Analysis Report Generator ===\n")
@@ -164,7 +168,8 @@ render_multiple_institution_reports <- function(
         success <- render_institution_report(
             brin_code = institution$brin_code,
             school_name = institution$school_name,
-            year = year
+            year = year,
+            suffix = suffix,
         )
 
         if (success) {

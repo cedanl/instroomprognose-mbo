@@ -7,7 +7,8 @@
 render_multiple_institution_reports(
   mode = "all",
   brin_codes = NULL,
-  year = 2024
+  year = 2024,
+  suffix = ""
 )
 }
 \arguments{
@@ -16,6 +17,8 @@ render_multiple_institution_reports(
 \item{brin_codes}{Vector of specific BRIN codes (when mode = "specific")}
 
 \item{year}{Numeric value of year to analyze}
+
+\item{suffix}{Optional suffix for the output filenames}
 }
 \description{
 Main Rendering Function

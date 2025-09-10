@@ -15,7 +15,7 @@ all:
 # korte verwijzing naar instelling zonder spaties
 mboa:
   # "default" is de demo modus, "cambo" gebruikt echte data
-  inherits: "default"
+  inherits: "cambo"
   # of de data_preparation opnieuw moet draaien. Als bestanden ontbreken, dan wordt dit automatisch gedaan
   prepare: false
   # echte brin, moet bestaan

@@ -1,5 +1,5 @@
 ---
-title: "Instroomanalyse `r params$school_name` `r params$year` (`r params$brin_code`)"
+title: "Instroomanalyse `r params$school_name` `r params$year` (`r params$brin_code`) `r params$suffix`"
 subtitle: "Data kwaliteit en conversie analyse"
 author: "Corneel den Hartogh"
 date: "`r format(Sys.time(), '%d %B %Y')`"
@@ -7,6 +7,7 @@ params:
   brin_code: "30RR"
   school_name: "MBO Amersfoort"
   year: 2024
+  suffix: ""
 format: 
   html:
     toc: true
@@ -14,8 +15,8 @@ format:
     code-fold: true
     code-summary: "Laat code zien"
 execute:
-  cache: true
-  freeze: auto
+  cache: false
+  freeze: false
   include: true
   warning: false
 ---
@@ -27,6 +28,8 @@ execute:
 #| include: false
 #| freeze: false
 
+# cache and freeze must be false since 00_setup modifies the environment
+
 # Load pipeline functions
 source("utils/00_setup.R")
 
@@ -36,7 +39,8 @@ if (!exists("params")) {
     brin_code = "30RR",
     school_name = "MBO Amersfoort", 
     comparison_mode = "relative_to_average",
-    year = 2024
+    year = 2024,
+    suffix = ""
   )
 }
 

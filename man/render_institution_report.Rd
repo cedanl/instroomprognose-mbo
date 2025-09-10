@@ -8,6 +8,7 @@ render_institution_report(
   brin_code,
   school_name,
   year = 2024,
+  suffix = "",
   input_file_path = "analysis/instelling_analysis.qmd",
   output_base_dir_relative = "../output"
 )
@@ -18,6 +19,8 @@ render_institution_report(
 \item{school_name}{Name of the school}
 
 \item{year}{Numeric value of year to analyze}
+
+\item{suffix}{Optional suffix for the output filename}
 
 \item{input_file_path}{File path to the Quarto input file}
 
