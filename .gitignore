@@ -70,6 +70,7 @@ rsconnect/
 
 # output files
 /output/*
+!/output/.gitkeep
 
 
 # quarto
