@@ -1,7 +1,7 @@
 #' Filter Applications Data
 #'
 #' @description
-#' Filters applications data based on specified criteria like school years and BRIN codes.
+#' Filters data on BRIN codes.
 #'
 #' @param data Applications dataset (output from load_and_enrich_applications)
 #' @param brin_codes Optional vector of BRIN codes to filter on
@@ -72,7 +72,7 @@ calculate_summary_stats <- function(data, grouping_level = "full") {
 #'
 #' @param data Applications dataset with enrolled students
 #' @param institution_name Name of the institution to analyze
-#' @param years Vector of years to include (default: c(2023, 2024))
+#' @param year Integer or numeric vector (default: 2024)
 #' @param min_institution_students Minimum institution students per postcode to include (default: 2)
 #' @return Data frame with postcode distribution analysis
 #'
@@ -82,7 +82,7 @@ calculate_summary_stats <- function(data, grouping_level = "full") {
 #' @importFrom utils head
 #'
 #' @export
-calculate_market_share_by_postcode <- function(data, institution_name, years = c(2023, 2024), min_institution_students = 2) {
+calculate_market_share_by_postcode <- function(data, institution_name, year = 2024, min_institution_students = 2) {
 
     # Validate input data first
     required_cols <- c("status", "school", "schooljaar", "postcodecijfers", "bsnhash")
@@ -109,7 +109,7 @@ calculate_market_share_by_postcode <- function(data, institution_name, years = c
         filter(
             status == "ENROLLED",
             school == institution_name,
-            schooljaar %in% years,
+            schooljaar == year,
             !is.na(postcodecijfers)
         ) |>
         mutate(postcode_4 = sprintf("%04d", as.numeric(postcodecijfers))) |>
@@ -117,7 +117,7 @@ calculate_market_share_by_postcode <- function(data, institution_name, years = c
 
     # Validate we have data after filtering
     if (nrow(institution_students) == 0) {
-        warning("No enrolled students found for ", institution_name, " in years ", paste(years, collapse = ", "), " with valid postal codes")
+        warning("No enrolled students found for ", institution_name, " in ", year, " with valid postal codes")
         return(data.frame())
     }
 
@@ -290,6 +290,7 @@ analyze_application_timing <- function(data, academic_year_start_month = 10) {
 #' @export
 analyze_status_transitions <- function(data, target_year = 2024) {
     # Step 1: Prepare the data
+
     status_data <- data |>
       filter(schooljaar_afgeleid == target_year)
 
@@ -334,7 +335,7 @@ count_new_status_by_week <- function(status_data) {
     status_data |>
         group_by(
             bsnhash, schooljaar, opleidingcode, instellingserkenningscode,
-            academic_week, academic_month, status
+            academic_week, academic_month, status_proper_case
         ) |>
         summarise(
             count = n_distinct(bsnhash, opleidingcode, instellingserkenningscode),
@@ -358,6 +359,7 @@ calculate_status_transitions <- function(status_data) {
             prev_status = lag(status_proper_case),
             prev_week = lag(academic_week)
         ) |>
+        ungroup() |>
         filter(!is.na(prev_status) & status_proper_case != prev_status) |>
         group_by(academic_week, academic_month, prev_status, status_proper_case) |>
         summarise(
@@ -433,6 +435,9 @@ build_running_status_counts <- function(new_status_by_week, status_transitions) 
             ))
         }
     }
+
+    print(names(new_status_by_week))
+    print(names(result))
 
     # Add month information and percentages
     result <- result |>

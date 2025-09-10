@@ -15,5 +15,5 @@ filter_applications_on_brin(data, brin_codes = NULL)
 Filtered tibble
 }
 \description{
-Filters applications data based on specified criteria like school years and BRIN codes.
+Filters data on BRIN codes.
 }

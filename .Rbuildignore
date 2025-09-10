@@ -17,7 +17,9 @@
 ^00_setup.R
 ^CLAUDE.md
 ^_site/
-^notebooks
+^notebooks/
+^output/
+^analysis/
 render_instelling_reports.R
 
 # Environment management

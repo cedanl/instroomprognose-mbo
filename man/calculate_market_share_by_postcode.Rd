@@ -7,7 +7,7 @@
 calculate_market_share_by_postcode(
   data,
   institution_name,
-  years = c(2023, 2024),
+  year = 2024,
   min_institution_students = 2
 )
 }
@@ -16,7 +16,7 @@ calculate_market_share_by_postcode(
 
 \item{institution_name}{Name of the institution to analyze}
 
-\item{years}{Vector of years to include (default: c(2023, 2024))}
+\item{year}{Integer or numeric vector (default: 2024)}
 
 \item{min_institution_students}{Minimum institution students per postcode to include (default: 2)}
 }

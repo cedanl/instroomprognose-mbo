@@ -19,4 +19,8 @@ Imports:
     readxl, 
     sf, 
     tibble, 
-    tidyr
+    tidyr,
+    quarto, 
+    stringr
+Suggests:
+    rstudioapi
