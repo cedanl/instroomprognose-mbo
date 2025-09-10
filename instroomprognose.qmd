@@ -177,8 +177,8 @@ if (active_config == "all") {
   tryCatch({
     render_multiple_institution_reports(
       mode = "all",
-      years = c(2023, 2024),
-      config_env = active_config
+      year = 2024,
+      sufix = config_settings$suffix
     )
     
     cat("\n✅ Alle instellingsrapporten succesvol gegenereerd!\n")
@@ -203,7 +203,8 @@ if (active_config == "all") {
     success <- render_institution_report(
       brin_code = brin_code,
       school_name = school_name,
-      year = c(target_year)
+      year = c(target_year),
+      suffix = config_settings$suffix
     )
     
     if (success) {
