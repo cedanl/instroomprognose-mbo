@@ -85,9 +85,9 @@ render_institution_report <- function(
             output_file = output_file,
             execute_dir = getwd(),
             execute_params = list(
-                brin_code = "30RR",
-                school_name = "MBO Amersfoort",
-                year = 2024,
+                brin_code = brin_code,
+                school_name = school_name,
+                year = year,
                 suffix = suffix
             ),
             quiet = FALSE
