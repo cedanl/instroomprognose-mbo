@@ -79,6 +79,8 @@ Het package genereert verschillende soorten rapporten:
 
 ### Data preparatie (`analysis/data_preparation.qmd`)
 
+-   Dit wordt gedaan op data van alle MBO instellingen in Koppelpunt / CAMBO data
+-   (en standaard wordt dit niet opnieuw gedaan, omdat het al gedaan is)
 -   Data inladen vanuit `data/01_raw/`
 -   Data verrijken met brin en opleidingsvariabelen
 -   Data kwaliteit checks en meer afgeleide verrijkingen, zoals nieuw schooljaar variabele maken en datum velden
