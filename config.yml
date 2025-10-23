@@ -25,3 +25,15 @@ mboa:
   # 2023 of 2024
   year: 2024
 
+graafschap:
+  # "default" is de demo modus, "cambo" gebruikt echte data
+  inherits: "cambo"
+  # of de data_preparation opnieuw moet draaien. Als bestanden ontbreken, dan wordt dit automatisch gedaan
+  prepare: false
+  # echte brin, moet bestaan
+  brin: "24ZZ"
+  # naam instelling in de plots en tekst
+  school_name: "Graafschap College"
+  # 2023 of 2024
+  year: 2024
+
