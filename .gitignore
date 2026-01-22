@@ -39,9 +39,6 @@ vignettes/*.pdf
 # R Environment Variables
 .Renviron
 
-# pkgdown site
-docs/
-
 # translation temp files
 po/*~
 
@@ -95,3 +92,7 @@ inst/*/data-raw/
 
 # files for development
 CLAUDE.md
+
+
+# allow pdf docs
+!docs/*.pdf
